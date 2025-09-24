@@ -1,0 +1,30 @@
+{
+    "C_Cpp.default.compilerPath": "cl.exe",
+    "files.associations": {
+        "assert.h": "c",
+        "stdio.h": "c",
+        "xutility": "c",
+        "xmemory": "c",
+        "compare": "c",
+        "memory": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "xtr1common": "c",
+        "nanoserv.h": "c",
+        "nanojson.h": "c",
+        "nanocommon.h": "c",
+        "malloc.h": "c",
+        "*.notc": "c",
+        "cstdlib": "c",
+        "threads.h": "c",
+        "stdbool.h": "c",
+        "vcruntime_c11_atomic_support.h": "c",
+        "time.h": "c",
+        "stdint.h": "c",
+        "corecrt.h": "c",
+        "vcruntime.h": "c",
+        "inttypes.h": "c",
+        "errno.h": "c"
+    }
+}

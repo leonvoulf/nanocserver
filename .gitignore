@@ -1,0 +1,5 @@
+build/
+json_*/
+*.idb
+*.pdb
+*.csv
