@@ -6,7 +6,7 @@
 
 #define CHECK_FOLDER L"./json_check/"
 
-static char buffer[8388608] = {0};
+static char buffer[0x200000] = {0};
 
 typedef struct {
     char* name;
@@ -64,6 +64,10 @@ int check_json(int argc, char** argv){
     wchar_t filename[MAX_PATH] = CHECK_FOLDER; 
     size_t prefix_length = sizeof(CHECK_FOLDER)/sizeof(wchar_t);
 
+    allocator_t j_alloc;
+    n_system_allocator_init(&j_alloc);
+    JsonParser parser = {.allocator=j_alloc};
+
     for(wchar_t** cur_filename = filenames; cur_filename != NULL && (*cur_filename) != NULL; cur_filename++){
         wchar_t* partial_filename = (*cur_filename);
         wcscat(filename, partial_filename);
@@ -73,14 +77,14 @@ int check_json(int argc, char** argv){
         buffer[r] = '\0';
 
         int errc = -1;
-        Node* parent = create_nodes_from_parent(buffer, strlen(buffer), &errc);
+        Node* parent = create_nodes_from_parent(buffer, strlen(buffer), &errc, &parser);
         if(parent == NULL) {
             wprintf(L"Failed to parse %s, errc: %d\n", partial_filename, errc);
         } else {
             wprintf(L"Successfully parsed %s\n", partial_filename);
             if(wcscmp(partial_filename, L"pass4.json") == 0){
                 A_VEC(NameLanguageBio) nlb = {0};
-                json_parse_nj_vector_NameLanguageBio(parent, &nlb, sizeof(NameLanguageBio));
+                json_parse_nj_vector_NameLanguageBio(parent, &nlb, sizeof(NameLanguageBio), &parser);
                 char out_buf[65536] = {0};
                 char* current = out_buf;
                 for(size_t i = 0; i < 100 && i < nlb.count; i++){
