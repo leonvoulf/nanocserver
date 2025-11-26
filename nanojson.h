@@ -64,6 +64,7 @@ typedef void(*json_parser_t)(Node* node, void* out, size_t elem_s, JsonParser* p
 Node* create_nodes_from_parent(const char* buffer, size_t buffer_len, int* error_code, JsonParser* parser);
 void free_json(Node* output_node, bool free_root, JsonParser* parser);
 size_t output_node(Node* node, char* buffer, size_t buffer_max, size_t cur_pos, size_t cur_indent, size_t add_indent);
+size_t json_approximate_size(Node* node, size_t add_indent);
 void json_init_node(Node* node, NodeType type);
 void json_parse_array(Node* node, void* out, json_parser_t parse_cb, size_t elem_s, JsonParser* parser);
 void json_parse_integral(Node* node, void* out, size_t elem_s, JsonParser* parser);
@@ -79,6 +80,9 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
 #define NJ_PTR(type) nj_ptr_ ##type
 #define NJ_VEC(type) nj_vector_ ##type
 #define NJ_ENUM(type) nj_enum_ ##type
+#define NJ_MAPPING(type) nj_mapping_ ##type
+
+#define NJ_KEY_MAPPING(type) struct {char* key; type value;}
 
 // For some weird compiler differences
 #define json_serialize_bool json_serialize__Bool
@@ -213,9 +217,28 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
         }   \
     }
 
+#define NJ_DEFINE_MAPPING_PARSE(Type) void json_parse_nj_mapping_ ##Type(Node* node, void *out_raw, size_t elem_s, JsonParser* parser){ \
+    if(node->type == FIELD){ \
+        json_parse_nj_mapping_ ##Type(&node->children.start[0], out_raw, elem_s, parser); \
+        return; \
+    } \
+    typedef struct { \
+        char* key; Type value; \
+    } mapping_type; \
+    typedef A_VEC(mapping_type)* Type_vec_ptr; \
+    Type_vec_ptr vec = (Type_vec_ptr)out_raw; \
+    for(size_t i = 0; i < node->children.count; i++){ \
+        mapping_type t = {0}; \
+        json_parse_ ##Type(&node->children.start[i], (void*)&t.value, sizeof(Type), parser); \
+        size_t l = strlen(node->children.start[i].key); \
+        t.key = parser->allocator.alloc(parser->allocator.context, l+1); \
+        strcpy_tn(t.key, l+1, node->children.start[i].key); \
+        VEC_Push_Ptr_Al(vec, &t, (&(parser->allocator))); \
+    } \
+}
+
 #define NJ_DECLARE_SERIALIZE(Type) void json_serialize_ ##Type(Node* node, void* buf_raw, size_t elem_s, JsonParser* parser); void json_serialize_nj_array_ ##Type(Node* node, void* buf_raw, size_t elem_s, JsonParser* parser); void json_serialize_nj_ptr_ ##Type(Node* node, void* buf_raw, size_t elem_s, JsonParser* parser);
 #define NJ_DECLARE_VECTOR_SERIALIZE(Type) void json_serialize_nj_vector_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser);
-
 
 #define NJ_DEFINE_SERIALIZE(Type, ...) void json_serialize_ ##Type(Node* node, void* buf_raw, size_t elem_s, JsonParser* parser) { \
         if(node->type == FIELD || node->type == ARRAY){ \
@@ -263,9 +286,36 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
         } \
     }
 
+#define NJ_DEFINE_MAPPING_SERIALIZE(Type) void json_serialize_nj_mapping_ ##Type(Node* node, void *buf_raw, size_t elem_s, JsonParser* parser){ \
+    if(node->type == FIELD){ \
+        Node n = (Node){.type=OBJECT}; \
+        VEC_Push_Al(node->children, &n, (&(parser->allocator))); \
+        json_serialize_nj_mapping_ ##Type(node->children.start, buf_raw, elem_s, parser); \
+        return; \
+    } \
+    typedef struct { \
+        char* key; Type value; \
+    } mapping_type; \
+    typedef A_VEC(mapping_type)* Type_vec_ptr; \
+    Type_vec_ptr buf = (Type_vec_ptr)buf_raw; \
+    size_t elems = buf->count; \
+    for(size_t i = 0; i < elems; i++) { \
+        Node n = {.type = FIELD}; \
+        Node n_c = {.type = OBJECT}; \
+        mapping_type b = buf->start[i]; \
+        size_t l = strlen(b.key)+1; \
+        n.key = parser->allocator.alloc(parser->allocator.context, l); \
+        strcpy_tn((char *)n.key, l, b.key); \
+        json_serialize_ ##Type(&n_c, (void*)(&buf->start[i].value), sizeof(Type), parser); \
+        VEC_Push_Al(n.children, &n_c, (&(parser->allocator))); \
+        VEC_Push_Al(node->children, &n, (&(parser->allocator))); \
+    } \
+}
+
 #define NJ_DEFINE_PARSE_SERIALIZE(Type, ...) NJ_DEFINE_PARSE(Type, __VA_ARGS__) NJ_DEFINE_SERIALIZE(Type, __VA_ARGS__)
 #define NJ_DECLARE_PARSE_SERIALIZE(Type) NJ_DECLARE_PARSE(Type) NJ_DECLARE_SERIALIZE(Type)
 #define NJ_DEFINE_VECTOR_PARSE_SERIALIZE(Type) NJ_DEFINE_VECTOR_PARSE(Type) NJ_DEFINE_VECTOR_SERIALIZE(Type)
+#define NJ_DEFINE_MAPPING_PARSE_SERIALIZE(Type) NJ_DEFINE_MAPPING_PARSE(Type) NJ_DEFINE_MAPPING_SERIALIZE(Type)
 
 #define NJ_DEFINE_BASIC_TYPE_ARRAY_PARSE(Type, underlying_parse) void json_parse_nj_array_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser) { \
         if(node->type == FIELD){ \
@@ -302,7 +352,7 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
     int val = 0; \
     for(int i = 0; i < sizeof(names_ordered)/sizeof(names_ordered[0]); i++){ \
         if(strcmp(names_ordered[i], node->key) == 0)\
-            val = 0;\
+            val = i;\
     }\
     *(int*)out = val; \
 } \
@@ -316,10 +366,15 @@ void json_serialize_nj_enum_##Type(Node* node, void* buf_raw, size_t elem_s, Jso
 
 
 #define NJ_PARSE_NODE(Type, node, out, parser) json_parse_##Type(node, (void*)out, sizeof(Type), parser)
+#define NJ_PARSE_NODE_VECTOR(Type, node, out, parser) json_parse_nj_vector_##Type(node, (void*)out, sizeof(Type), parser)
+
 #define NJ_SERIALIZE_NODE(Type, node, buf_raw, parser) json_serialize_##Type(node, (void*)buf_raw, sizeof(Type), parser)
+#define NJ_SERIALIZE_NODE_VECTOR(Type, node, out, parser) json_serialize_nj_vector_##Type(node, (void*)out, sizeof(Type), parser)
 
 // DUBIOUS CODE GENERATION
 #ifdef NJ_INTEGRAL_ARRAY_DEFINITIONS
+#define json_serialize_int json_serialize_integral
+#define json_parse_int json_parse_integral
 #define NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(x) NJ_DEFINE_BASIC_TYPE_ARRAY_PARSE(x, json_parse_integral) NJ_DEFINE_BASIC_TYPE_ARRAY_SERIALIZE(x, json_serialize_integral)
 
 NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int);
@@ -643,6 +698,14 @@ void free_json(Node* parent, bool free_root, JsonParser* parser){
         parser->allocator.free(parser->allocator.context, parent);
 }
 
+size_t json_approximate_size(Node* node, size_t add_indent){
+    size_t total_size = add_indent;
+    for(size_t i = 0; i < node->children.count; i++){
+        total_size += json_approximate_size(&node->children.start[i], add_indent)+add_indent;
+    }
+    return strnlen(node->key, 1024) + total_size + 6;
+}
+
 size_t output_node(Node* node, char* buffer, size_t buffer_max, size_t cur_pos, size_t cur_indent, size_t add_indent){
     if(node->type == OBJECT){
         size_t child_pos = cur_pos + 1;
@@ -685,11 +748,13 @@ size_t output_node(Node* node, char* buffer, size_t buffer_max, size_t cur_pos, 
         return child_pos;
     }
     if(node->type == VALUE){
-        if(node->key == NULL){
+        size_t l = 0;
+        if(node->key == NULL && node->flags >= NUMERICAL){
             copystrn((buffer + cur_pos), "\"\"", 3);
             return cur_pos + 2;
+        } else if(node->key != NULL) {
+            l = strlen(node->key);
         }
-        size_t l = strlen(node->key);
         switch(node->flags){
             case NUMERICAL:
                 copystrn((buffer + cur_pos), node->key, l+1);
@@ -820,11 +885,11 @@ void json_serialize_floating(Node* node, void* buf, size_t elem_s, JsonParser* p
     assert(node->flags == NUMERICAL && "Non numerical expressions cannot be parsed as numerical types");
     if(elem_s == sizeof(float)){
         float val = *(float*)buf;
-        sprintf((char *)node->key, "%f", val);
+        snprintf((char *)node->key, MAX_NUMERICAL_EXPRESSION_DIGITS-1, "%f", val); // ADD PRECISION
     }
     if(elem_s == sizeof(double)){
         double val = *(double*)buf;
-        sprintf((char *)node->key, "%lf", val);
+        snprintf((char *)node->key, MAX_NUMERICAL_EXPRESSION_DIGITS-1, "%f", val);
     }
 }
 
@@ -855,6 +920,10 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
     node->type = VALUE;
     node->flags = *(bool*)buf ? TRUE_VALUE : FALSE_VALUE;
     node->key = NULL; // No need to waste memory on text
+}
+
+void json_serialize_nj_mapping(Node* node, void* buf, size_t elem_s, JsonParser* parser){
+
 }
 
 #endif

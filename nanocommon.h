@@ -37,9 +37,10 @@
 #define VEC_Get(vec, index) vec.start + index
 #define VEC_Remove(vec, index) if(index < vec.count - 1) {memmove((void*)(vec.start + index), (void*)(vec.start + (index+1)), (vec.count - 1 - index)*sizeof(*vec.start));}; vec.count--
 #define VEC_Free(vec) if(vec.start != NULL) NC_FREE(vec.start)
+#define VEC_Free_Al(vec, allocator) if(vec.start != NULL) allocator->free(allocator->context, vec.start)
 
-#define VEC_Init_Reserve(vec, capacity) do { vec.start = NC_ALLOCATE(capacity*sizeof(*vec.start)); vec->capacity=capacity; } while(0); 
-#define VEC_Init_Reserve_Al(vec, capacity, allocator) do { vec.start = allocator.allocate(allocator->context, capacity*sizeof(*vec.start)); vec->capacity=capacity; } while(0); 
+#define VEC_Init_Reserve(vec, cap) do { vec.start = NC_ALLOCATE(cap*sizeof(*vec.start)); vec.capacity=cap; } while(0); 
+#define VEC_Init_Reserve_Al(vec, cap, allocator) do { vec.start = allocator->alloc(allocator->context, cap*sizeof(*vec.start)); vec.capacity=cap; } while(0); 
 
 #define copystrn(dest, src, length) snprintf(dest, length, "%s", src)
 
@@ -51,6 +52,7 @@ typedef struct StrView {
 VEC(StrView);
 
 StrView_Vec split_str(const char* buffer, size_t length, char delimiter);
+void replace_in_str(char* dest, const char* source, const char* from, const char* to, size_t max_buffer_len, int occurences);
 size_t to_buffer(StrView* str, char* buffer, size_t max_size);
 int strcpy_tn(char *_Dst, size_t _SizeInBytes, const char *_Src);
 
@@ -81,6 +83,47 @@ void n_system_allocator_init(system_allocator* allocator);
 #include <assert.h>
 #include <string.h>
 
+#ifndef _Noreturn // TEMPORARY
+#define _Noreturn __declspec(noreturn)
+#endif
+#include <threads.h>
+
+#ifdef NC_ATOMIC_EXTENSION
+#ifdef _WIN32
+#include <winnt.h>
+#endif
+
+void atomic_store_64(volatile uint64_t* target, uint64_t value){
+    #ifdef _WIN32
+        _ReadWriteBarrier();
+        InterlockedExchange64(target, value);
+    #elif defined(__GNUC__)
+        __sync_synchronize();
+        *target = value;
+    #endif
+}
+
+uint64_t atomic_load_64(volatile uint64_t* target){
+    #ifdef _WIN32
+        _ReadWriteBarrier();
+    #elif defined(__GNUC__)
+        __sync_synchronize();
+    #endif
+    return *target;
+} 
+
+bool compare_and_swap_64(volatile uint64_t* target, uint64_t comparand, uint64_t value){
+    #ifdef _WIN32
+        return InterlockedCompareExchange64(target, value, comparand) == comparand;
+    #elif defined(__GNUC__)
+        return __atomic_compare_exchange_n(target, &comparand, value, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+    #endif
+    return false;
+}
+
+
+#endif
+
 size_t to_buffer(StrView* str, char* buffer, size_t max_size){
     size_t copy_size = max_size > str->length +1 ? str->length + 1 : max_size;
     memcpy(buffer, (const void*)str->start, copy_size - 1);
@@ -105,6 +148,34 @@ StrView_Vec split_str(const char* buffer, size_t length, char delimiter){
     return views;
 }
 
+void replace_in_str(char* dest, const char* src, const char* from, const char* to, size_t max_buffer_len, int occurences){
+    size_t in_from = 0;
+    size_t in_dest = 0;
+    size_t last_copy_position = 0;
+    size_t from_l = strnlen(from, max_buffer_len);
+    size_t to_l = strnlen(to, max_buffer_len);
+    size_t dest_l = strnlen(dest, max_buffer_len);
+    int remaining = occurences;
+    for(size_t i = 0; src != NULL && src[i] != '\0' && i < max_buffer_len && remaining != 0; i++){
+        if(src[i] != from[in_from++]){
+            in_from = 0;
+        }
+        if(in_from == from_l){
+            in_dest += strcpy_tn(dest + in_dest, i-from_l-last_copy_position, src + last_copy_position);
+            in_dest += strcpy_tn(dest + in_dest, to_l, to);
+            
+            last_copy_position = i + 1;
+            remaining--;
+        }
+    }
+    size_t src_l = strnlen(src, max_buffer_len);
+    if(last_copy_position < src_l){
+        strcpy_tn(dest + in_dest, src_l - last_copy_position + 1, src + last_copy_position);
+    } else {
+        dest[in_dest] = '\0';
+    }
+}
+
 #if !defined(__STDC_LIB_EXT1__) && !defined(strcpy_s)
 int strcpy_tn(char *_Dst, size_t _SizeInBytes, const char *_Src){
     #if defined(strlcpy)
@@ -113,8 +184,10 @@ int strcpy_tn(char *_Dst, size_t _SizeInBytes, const char *_Src){
         size_t i;
         for(i = 0; i < _SizeInBytes && _Src[i] != '\0'; i++)
             _Dst[i] = _Src[i];
-        if(i >= _SizeInBytes)
+        if(i > _SizeInBytes){
+            _Dst[i-1] = '\0';
             return i;
+        }
         _Dst[i] = '\0';
         return i+1;
     #endif
@@ -128,6 +201,9 @@ typedef struct {
     size_t block_size;
     void* current;
     bool flexible_memory;
+
+    volatile uint64_t block_allocation_lock;
+    mtx_t* mtx;
 } arena_allocator_context;
 
 static void* n_system_wrapper_alloc(void* allocator, size_t size){ if(allocator != NULL) return NULL; return malloc(size); }
@@ -145,6 +221,9 @@ void n_system_allocator_init(system_allocator* allocator){
 void n_arena_allocator_init(arena_allocator* allocator, size_t max_memory, bool flexible_memory){
     arena_allocator_context* c = NC_ALLOCATE(sizeof(arena_allocator_context));
     c->initial_start = NC_ALLOCATE(2*sizeof(size_t)+max_memory);
+    c->mtx = NC_ALLOCATE(sizeof(mtx_t));
+    mtx_init(c->mtx, mtx_plain);
+    
     c->start = (size_t*)c->initial_start+1;
     memset(c->start, 0, max_memory+sizeof(size_t));
     c->total_memory = max_memory;
@@ -160,7 +239,7 @@ void n_arena_allocator_init(arena_allocator* allocator, size_t max_memory, bool 
     allocator->free = n_arena_allocator_free;
 }
 
-void* n_arena_allocator_realloc(void* allocator, void* start, size_t size){
+void* n_arena_allocator_realloc(void* allocator, void* start, size_t size){ // proceed only if not locked
     if(allocator == NULL)
         return NULL;
 
@@ -170,6 +249,8 @@ void* n_arena_allocator_realloc(void* allocator, void* start, size_t size){
 
     arena_allocator_context* c = (arena_allocator_context*)allocator;
 
+    mtx_lock(c->mtx);
+
     void* cur = ((uint32_t*)start - 1);
     uint32_t to_skip = ((*(uint32_t*)cur) ^ (uint32_t)(1 << 31));
 
@@ -178,26 +259,37 @@ void* n_arena_allocator_realloc(void* allocator, void* start, size_t size){
             (size - to_skip) + 2*sizeof(uint32_t) < (*(uint32_t*)after_start & (uint32_t)(~(1 << 31)))))
         || (size + 2*sizeof(uint32_t) < to_skip)){
         uint32_t free_after = *(uint32_t*)after_start;
-        *(uint32_t*)after_start = 0;
+        if(to_skip >= size + sizeof(uint32_t)){
+            to_skip += 0;
+        }
+
+        *(uint32_t*)after_start = 0; // cas?
         char* after_new = (char*)cur + size + sizeof(uint32_t);
-        *(uint32_t*)(after_new) = (to_skip + free_after) - size - sizeof(uint32_t);
-        *(uint32_t*)cur = (size + sizeof(uint32_t)) | (1 << 31);
+        *(uint32_t*)(after_new) = (to_skip + free_after) - size - sizeof(uint32_t); // cas?
+        *(uint32_t*)cur = (size + sizeof(uint32_t)) | (1 << 31); // cas?
         if((char*)cur < (char*)c->start + c->block_size && (char*)cur >= (char*)c->start)
-            c->current = after_new;
+            c->current = after_new; // cas?
+
+        mtx_unlock(c->mtx);
+        
         return start;
     }
 
     uint32_t free_after_old = *(uint32_t*)after_start;
 
+    mtx_unlock(c->mtx);
+
     void* new_start = n_arena_allocator_alloc(allocator, size);
     if(new_start == NULL)
         return NULL;
     
+    mtx_lock(c->mtx);
+
     uint32_t free_after = 0;
     if((((*(uint32_t*)after_start) & (uint32_t)(1 << 31)) == 0)){
         free_after = *(uint32_t*)after_start;
         if(free_after == free_after_old)
-            *(uint32_t*)after_start = 0;
+            *(uint32_t*)after_start = 0; // cas?
         else {
             free_after += 0;
         }
@@ -214,20 +306,25 @@ void* n_arena_allocator_realloc(void* allocator, void* start, size_t size){
             end_of_block = (char*)c->start + c->block_size;
         }
     }
-    c->current = cur;
+    c->current = cur; // cas?
     if(new_start < (void*)((char*)start + to_skip)) {
         memmove(new_start, start, to_skip - sizeof(uint32_t));
     } else {
         memcpy(new_start, start, to_skip - sizeof(uint32_t));
     }
+
+    mtx_unlock(c->mtx);
+
     return new_start;
 }
 
-void* n_arena_allocator_alloc(void* allocator, size_t size){
+void* n_arena_allocator_alloc(void* allocator, size_t size){ // proceed only if not locked
     if(allocator == NULL)
         return NULL;
     arena_allocator_context* c = (arena_allocator_context*)allocator;
     
+    mtx_lock(c->mtx);
+
     void* cur = c->current;
     void* alloc_end = (char*)c->start + c->block_size; 
     size_t size_to_alloc = size + sizeof(uint32_t);
@@ -239,7 +336,7 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){
     }
 
 
-    if((char*)alloc_end - (char*)cur < (ptrdiff_t)size_to_alloc){
+    if((char*)alloc_end - (char*)cur < (ptrdiff_t)size_to_alloc){ // locked
         if(!c->flexible_memory)
             return NULL; // not enough memory
         size_t* end_of_block = (size_t*)((char*)c->start + c->block_size);
@@ -248,6 +345,9 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){
             c->block_size = *(size_t*)c->start;
             c->start = (size_t*)c->start + 1;
             c->current = c->start;
+
+            mtx_unlock(c->mtx);
+
             return n_arena_allocator_alloc(allocator, size);
         }
         
@@ -262,6 +362,9 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){
         *((size_t*)c->start-1) = old_size;
         memset((void*)((char*)c->current), 0, old_size+sizeof(size_t));
         *(uint32_t*)c->current = (uint32_t)old_size;
+
+        mtx_unlock(c->mtx);
+
         return n_arena_allocator_alloc(allocator, size);
     }
     uint32_t cur_free = *(uint32_t*)cur;
@@ -270,19 +373,21 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){
         size_to_alloc += 0;
     }
 
-    *(uint32_t*)cur = ((uint32_t)(1 << 31)) | size_to_alloc;
+    *(uint32_t*)cur = ((uint32_t)(1 << 31)) | size_to_alloc; // cas linked to two below
 
     uint32_t free_after_alloc = cur_free - size_to_alloc;
     if(free_after_alloc > 0){
         //printf("free after current arena alloc %lu\n", free_after_alloc);
-        *(uint32_t*)((char*)cur + size_to_alloc) = free_after_alloc;
+        *(uint32_t*)((char*)cur + size_to_alloc) = free_after_alloc; // cas
     }
-    c->current = (char*)cur + size_to_alloc;
+    c->current = (char*)cur + size_to_alloc; // cas
+
+    mtx_unlock(c->mtx);
 
     return (void*)((char*)cur + sizeof(uint32_t));
 }
 
-bool n_arena_allocator_free(void* allocator, void* start){
+bool n_arena_allocator_free(void* allocator, void* start){ // locked
     if(allocator == NULL || start != NULL)
         return false;
     arena_allocator_context* c = (arena_allocator_context*)allocator;

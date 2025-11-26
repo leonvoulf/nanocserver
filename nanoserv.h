@@ -55,9 +55,9 @@ typedef int SOCKET;
 #endif
 
 
-#define CODE_TO_NAME(status_code) (((status_code*99999)%166)-3) // some magixs
+#define CODE_TO_NAME(status_code) (((status_code*99999)%166)-3) // some magix
 
-const char* status_names[] = {"Service Unavailable", "", "Unavailable For Legal Reasons", "Loop Detected", "", "", "", "Not Found", "", "",
+static const char* status_names[] = {"Service Unavailable", "", "Unavailable For Legal Reasons", "Loop Detected", "", "", "", "Not Found", "", "",
      "Conflict", "Multiple Choices", "", "URI Too Long", "Use Proxy", "", "", "", "Created", "Failed Dependency", "", "Partial Content",
       "Too Many Requests", "", "", "Processing", "", "", "", "", "", "", "Not Implemented", "IM Used", "", "Variant Also Negotiates", "", "",
        "Network Authentication Required", "Payment Required", "", "", "Proxy Authentication Required", "", "", "Precondition Failed", "See Other",
@@ -71,7 +71,9 @@ const char* status_names[] = {"Service Unavailable", "", "Unavailable For Legal 
              "HTTP Version Not Supported", "", "", "Not Extended", "Unauthorized", "", "", "Not Acceptable", "", "", "Length Required", "Found",
                 "OK", "Already Reported", "Request Header Fields Too Large"};
 
-const char* possible_methods[] = {"GET", "POST", "UPDATE", "PATCH", "DELETE", "PUT"};
+static const char* content_types[] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "application/javascript", "", "", "", "", "application/zip", "", "", "text/plain", "", "", "", "", "", "", "text/css", "", "", "", "application/vnd.rar", "text/csv", "", "", "application/xml", "image/svg+xml", "application/x-tar", "audio/wav", "", "", "", "", "image/jpeg", "", "", "font/ttf", "image/png", "", "image/x-icon", "application/octet-stream", "application/octet-stream", "application/vnd.ms-fontobject", "application/json", "", "application/wasm", "", "", "application/pdf", "", "", "", "image/gif", "application/ogg", "application/x-7z-compressed", "", "text/html", "", "", "", "", "", "", "image/jpeg", "", "", "video/webm", "font/woff", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "audio/mpeg", "", "", "", "", "", "", "video/mp4", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
+
+static const char* possible_methods[] = {"GET", "POST", "UPDATE", "PATCH", "DELETE", "PUT"};
 
 //SUPPORT FOR HTTP STATUS CODE NAMES
 
@@ -82,7 +84,9 @@ typedef enum HTTPMethod {
     PATCH,
     DELETE,
     PUT,
-    UNKNOWN
+    OPTIONS,
+    ALL_METHODS,
+    METHOD_UNKNOWN
 } HTTPMethod;
 
 typedef enum {
@@ -117,12 +121,15 @@ typedef struct HTTPResponse {
 
 } HTTPResponse;
 
-typedef void(*request_handler_t)(HTTPRequest*, HTTPResponse*);
+typedef void* route_handler_param;
+typedef void(*request_handler_t)(const HTTPRequest*, HTTPResponse*, route_handler_param);
 
 typedef struct RouteHandler {
     const char* match;
     HTTPMethod method;
     request_handler_t handler;
+    route_handler_param param;
+    bool middle_route_handler;
 } RouteHandler;
 
 
@@ -146,9 +153,13 @@ typedef struct Server {
 
 void ns_free_header(Header* header);
 Server* ns_create_server(const char* server_address, int port, bool server_socket_non_blocking);
+void ns_stop_server(Server* server);
 void ns_destroy_server(Server* server);
-void ns_request(Server* server, HTTPMethod method, const char* match, request_handler_t handler);
-char** ns_parse_query_params(HTTPRequest* request, char* buffer, size_t max_buffer_size, size_t max_params);
+void ns_request(Server* server, HTTPMethod method, const char* match, request_handler_t handler, route_handler_param param);
+void ns_middle_handler(Server* server, HTTPMethod method, const char* match, request_handler_t handler, route_handler_param param);
+void ns_serve_directory(Server* server, const char* match, const char* directory_path);
+void ns_serve_file(Server* server, const char* match, const char* path);
+char** ns_parse_query_params(const HTTPRequest* request, char* buffer, size_t max_buffer_size, size_t max_params);
 long ns_calc_sleep(Server* server);
 void ns_listen_incoming(Server* server);
 bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t count);
@@ -156,12 +167,15 @@ char* ns_glue_response(HTTPResponse* res);
 void ns_send_response(HTTPResponse* res);
 HTTPResponse* ns_borrow_response(HTTPResponse* res); // gives up memory control of the response to the caller
 void ns_set_response_body(HTTPResponse* res, const char* content_type, const char* body);
+void ns_set_response_body_status(HTTPResponse* res, const char* content_type, const char* body, int status);
 void ns_free_request_response(HTTPRequest* req, HTTPResponse* res);
-request_handler_t ns_match_handler(Server* server, const HTTPRequest* req);
+RouteHandler* ns_match_handler(Server* server, const HTTPRequest* req);
 ClientResult ns_handle_client(Server* server, SOCKET client_socket); // socket is ready for rw
 void ns_put_header(HTTPResponse* res, const char* key, const char* value);
-const char* ns_get_header(HTTPRequest* res, const char* key);
+const char* ns_get_header(const HTTPRequest* res, const char* key);
 void ns_start_server(Server* server);
+void socket_startup();
+void close_socket(SOCKET socket);
 
 #ifdef NS_IMPLEMENTATION
 #ifndef NS_IMPLEMENTATION_GUARD
@@ -299,6 +313,10 @@ Server* ns_create_server(const char* server_address, int port, bool server_socke
     return server;
 }
 
+void ns_stop_server(Server* server){
+    server->shutdown_pending = true;
+}
+
 void ns_destroy_server(Server* server){
     if(server->listening_socket)
         close_socket(server->listening_socket);
@@ -312,12 +330,17 @@ void ns_destroy_server(Server* server){
 }
 
 
-void ns_request(Server* server, HTTPMethod method, const char* match, request_handler_t handler){
-    RouteHandler r = {.match = match, .method = method, .handler = handler};
+void ns_request(Server* server, HTTPMethod method, const char* match, request_handler_t handler, route_handler_param param){
+    RouteHandler r = {.match = match, .method = method, .handler = handler, .param=param};
     VEC_Push(server->handlers, &r);
 }
 
-char** ns_parse_query_params(HTTPRequest* request, char* buffer, size_t max_buffer_size, size_t max_params){
+void ns_middle_handler(Server* server, HTTPMethod method, const char* match, request_handler_t handler, route_handler_param param){
+    RouteHandler r = {.match = match, .method = method, .handler = handler, .param=param, .middle_route_handler=true};
+    VEC_Push(server->handlers, &r);
+}
+
+char** ns_parse_query_params(const HTTPRequest* request, char* buffer, size_t max_buffer_size, size_t max_params){
     memset(buffer, 0, max_buffer_size);
     size_t offset = 0;
     size_t path_l = strlen(request->path);
@@ -325,6 +348,7 @@ char** ns_parse_query_params(HTTPRequest* request, char* buffer, size_t max_buff
     for(; offset < path_l && request->path[offset] != '?'; offset++);
     if(offset == path_l)
         return NULL;
+    offset += 1;
     size_t total_params = 0;
     for(size_t i = 0; offset + i < path_l; i++)
         if(request->path[offset + i] == '=')
@@ -342,7 +366,7 @@ char** ns_parse_query_params(HTTPRequest* request, char* buffer, size_t max_buff
     while(cur < request->path + path_l){
         const char* key_start = cur;
         for(; cur < request->path + path_l && (*cur != '='); cur++);
-        if((buffer_position + (cur - key_start)) - actual_buffer_start >= (ptrdiff_t)max_buffer_size){
+        if((buffer_position + (cur+1 - key_start)) - actual_buffer_start >= (ptrdiff_t)max_buffer_size){
             break;
         }
         memcpy(buffer_position, key_start, cur-key_start);
@@ -350,7 +374,7 @@ char** ns_parse_query_params(HTTPRequest* request, char* buffer, size_t max_buff
         params_position[allocated++] = buffer_position;
 
         buffer_position += cur-key_start+1;
-        const char* val_start = cur;
+        const char* val_start = cur+1;
         for(; cur < request->path + path_l && (*cur != '&'); cur++);
         if((buffer_position + (cur - val_start)) - actual_buffer_start >= (ptrdiff_t)max_buffer_size){
             allocated--;
@@ -361,6 +385,7 @@ char** ns_parse_query_params(HTTPRequest* request, char* buffer, size_t max_buff
         params_position[allocated++] = buffer_position;
 
         buffer_position += cur-val_start+1;
+        cur += 1;
     }
     params_position[allocated] = NULL;
     return (char**)buffer;
@@ -457,14 +482,14 @@ char* str_search(char search_char, char* str, size_t length, size_t* new_length)
 }
 
 bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t count){
-    HTTPMethod method = UNKNOWN;
+    HTTPMethod method = METHOD_UNKNOWN;
     size_t cur_length = count;
     char* method_word = str_space(rbuff, cur_length, &cur_length);
     for(size_t i = 0; i < sizeof(possible_methods)/sizeof(possible_methods[0]); i++)
         if(strncmp(rbuff, possible_methods[i], method_word-rbuff) == 0)
             method = (HTTPMethod)i;
 
-    if(method == UNKNOWN || cur_length == 0){
+    if(method == METHOD_UNKNOWN || cur_length == 0){
         LOG_DEBUG("Unknown HTTP Method detected on socket %d", (int)socket);
         return false;
     }
@@ -520,7 +545,7 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
             }
     }
 
-    if(cur_length == 0){
+    if(cur_length == 0 || cur_length >= (1 << 31)){
         req->body = NULL;
         return true; // nobody
     } else {
@@ -537,15 +562,16 @@ char* ns_glue_response(HTTPResponse* res){
     size_t approx_size = res->headers.count * 512 + content_type_length + content_length + 64;
     char* glued_resp = (char*)malloc(approx_size); // ALLOCATION
     size_t cur_loc = 0;
-    cur_loc += snprintf(glued_resp + cur_loc, 32, "HTTP/1.1 %d %s\n", res->status_code, status_names[CODE_TO_NAME(res->status_code)]);
-    cur_loc += snprintf(glued_resp + cur_loc, 32, "Content-Length: %zd\n", content_length);
+    cur_loc += snprintf(glued_resp + cur_loc, 32, "HTTP/1.1 %d %s\r\n", res->status_code, status_names[CODE_TO_NAME(res->status_code)]);
+    cur_loc += snprintf(glued_resp + cur_loc, 32, "Content-Length: %zd\r\n", content_length);
     if(content_type_length > 0)
-        cur_loc += snprintf(glued_resp + cur_loc, 32 + content_type_length, "Content-Type: %s\n", res->content_type);
+        cur_loc += snprintf(glued_resp + cur_loc, 32 + content_type_length, "Content-Type: %s\r\n", res->content_type);
     for(size_t i = 0; i < res->headers.count; i++)
-        cur_loc += snprintf(glued_resp + cur_loc, 512, "%s: %s\n", res->headers.start[i].key, res->headers.start[i].value);
+        cur_loc += snprintf(glued_resp + cur_loc, 512, "%s: %s\r\n", res->headers.start[i].key, res->headers.start[i].value);
     
+    glued_resp[cur_loc++] = '\r';
+    glued_resp[cur_loc++] = '\n';
     if(content_length > 0){
-        glued_resp[cur_loc++] = '\n';
         strcpy(glued_resp + cur_loc, res->body);
     }
     return glued_resp;
@@ -572,6 +598,11 @@ void ns_set_response_body(HTTPResponse* res, const char* content_type, const cha
     res->body = body;
 }
 
+void ns_set_response_body_status(HTTPResponse* res, const char* content_type, const char* body, int status){
+    ns_set_response_body(res, content_type, body);
+    res->status_code = status;
+}
+
 void ns_free_request_response(HTTPRequest* req, HTTPResponse* res){
     if(req != NULL){
         if(req->body != NULL)
@@ -585,7 +616,7 @@ void ns_free_request_response(HTTPRequest* req, HTTPResponse* res){
     if(res != NULL){
         if(res->body != NULL && res->body_dealloc != NULL)
             res->body_dealloc((void*)res->body);
-        VEC_Free(res->headers);
+        
         for(size_t i = 0; i < res->headers.count; i++){
             ns_free_header(&res->headers.start[i]);
         }
@@ -593,20 +624,39 @@ void ns_free_request_response(HTTPRequest* req, HTTPResponse* res){
     }
 }
 
-request_handler_t ns_match_handler(Server* server, const HTTPRequest* req){
+RouteHandler* ns_match_handler(Server* server, const HTTPRequest* req){
     for(size_t i = 0; i < server->handlers.count; i++){
-        if(server->handlers.start[i].method != req->method)
+        if(server->handlers.start[i].middle_route_handler)
+            continue;
+        if(server->handlers.start[i].method != req->method && server->handlers.start[i].method != ALL_METHODS)
             continue;
         if(server->handlers.start[i].match == NULL || server->handlers.start[i].match[0] != req->path[0])
             continue;
         const char* until_wildcard = strchr(server->handlers.start[i].match, '*');
-        size_t l = until_wildcard - 1 - server->handlers.start[i].match;
+        size_t l = until_wildcard - server->handlers.start[i].match;
         if(until_wildcard == NULL)
             l = strlen(server->handlers.start[i].match);
         if(strncmp(server->handlers.start[i].match, req->path, l) == 0)
-            return server->handlers.start[i].handler;
+            return (server->handlers.start + i);
     }
     return NULL;
+}
+
+void ns_call_all_middle_route_handlers(Server* server, const HTTPRequest* req, HTTPResponse* res){
+    for(size_t i = 0; i < server->handlers.count; i++){
+        if(!server->handlers.start[i].middle_route_handler)
+            continue;
+        if(server->handlers.start[i].method != req->method && server->handlers.start[i].method != ALL_METHODS)
+            continue;
+        if(server->handlers.start[i].match == NULL || server->handlers.start[i].match[0] != req->path[0])
+            continue;
+        const char* until_wildcard = strchr(server->handlers.start[i].match, '*');
+        size_t l = until_wildcard - server->handlers.start[i].match;
+        if(until_wildcard == NULL)
+            l = strlen(server->handlers.start[i].match);
+        if(strncmp(server->handlers.start[i].match, req->path, l) == 0)
+            server->handlers.start[i].handler(req, res, server->handlers.start[i].param);
+    }
 }
 
 
@@ -627,12 +677,13 @@ ClientResult ns_handle_client(Server* server, SOCKET client_socket){ // socket i
         if(!ns_breakdown_request(&req, client_socket, rbuff, (size_t)r))
             return NS_CLIENT_RESULT_ERROR;
 
-        request_handler_t handle = ns_match_handler(server, &req);
+        ns_call_all_middle_route_handlers(server, &req, &res);
+        RouteHandler* handle = ns_match_handler(server, &req);
         if(handle == NULL){
             LOG_DEBUG("Received HTTP request without appropriate handler on socket %d", (int)client_socket);
             return NS_CLIENT_RESULT_ERROR;
         }
-        handle(&req, &res);
+        handle->handler(&req, &res, handle->param);
         if(!res.borrowed){ // if it was borrowed - then the caller has to send it
             ns_send_response(&res);
             ns_free_request_response(&req, &res);
@@ -653,11 +704,94 @@ void ns_put_header(HTTPResponse* res, const char* key, const char* value){
     VEC_Push(res->headers, &h);
 }
 
-const char* ns_get_header(HTTPRequest* res, const char* key){
+const char* ns_get_header(const HTTPRequest* res, const char* key){
     for(size_t i = 0; i < res->headers.count; i++)
         if(strcmp(res->headers.start[i].key, key) == 0)
             return res->headers.start[i].value;
     return NULL;
+}
+
+static const char* ns_file_extension_content_type(const char* ext){
+	size_t start = 0;
+	for(size_t i = 0; ext[i] != '\0'; i++){
+		start += ((uint8_t)ext[i] ^ (uint8_t)101 + 22);
+    }
+    start = start % (sizeof(content_types)/sizeof(content_types[0]));
+    return content_types[start];
+}
+
+
+static void ns_file_handler(const HTTPRequest* req, HTTPResponse* res, route_handler_param param){
+    const char* filename = (const char*)param;
+    size_t l = 0;
+    if(filename == NULL || (l = strnlen(filename, 256)) < 1){
+        res->status_code = 404;
+        return;
+    }
+    
+    FILE* file = fopen(filename, "rb"); // IMPLEMENTATION: can make it so filesize is read upon configuration and stored as a param
+    if(file == NULL){
+        res->status_code = 404;
+        return;
+    }
+    fseek(file, 0L, SEEK_END);
+    size_t file_size = ftell(file);
+    fseek(file, 0L, SEEK_SET);
+
+    res->body = (const char*)malloc(file_size+1);
+    fread((void*)res->body, sizeof(char), file_size, file);
+    ((char *)res->body)[file_size] = '\0';
+    fclose(file);
+
+    char* extension = (char*)filename + l - 1;
+    for(; *extension != '.'; --extension);
+    const char* content_type = ns_file_extension_content_type(extension);
+    if(strlen(content_type) == 0){
+        content_type = "application/octet-stream";
+    }
+    res->content_type = content_type;
+    res->status_code = 200;
+}
+
+typedef struct { const char* match; const char* dirn; } ns_directory_params;
+
+static void ns_directory_handler(const HTTPRequest* req, HTTPResponse* res, route_handler_param param){
+    ns_directory_params* directory_params = (ns_directory_params*)param;
+    if(directory_params == NULL){
+        res->status_code = 404;
+        return;
+    }
+
+    char* until_wildcard = strchr(directory_params->match, '*');
+    if(until_wildcard == NULL){
+        res->status_code = 404;
+        return;
+    }
+    const char* directory_name_start = req->path + (until_wildcard - directory_params->match);
+    char path[256];
+    path[0] = '\0';
+    size_t l1 = strnlen(directory_params->dirn, sizeof(path)); size_t l2 = strnlen(directory_name_start, sizeof(path));
+    if(l1 + l2 >= sizeof(path)){
+        res->status_code = 500;
+        return;
+    }
+    strncat(path, directory_params->dirn, sizeof(path));
+    strncat(path, directory_name_start, sizeof(path));
+    ns_file_handler(req, res, (route_handler_param)path);
+}
+
+
+void ns_serve_directory(Server* server, const char* match, const char* directory_path){
+    ns_directory_params* directory_params = (ns_directory_params*)malloc(sizeof(ns_directory_params));
+    *directory_params = (ns_directory_params){.match=match, .dirn=directory_path};
+    assert(strchr(match, '*') != NULL && "Directory match must include a wildcard to allow for filenames");
+    RouteHandler r = {.match = match, .method = GET, .handler = ns_directory_handler, .param=(route_handler_param)directory_params};
+    VEC_Push(server->handlers, &r);
+}
+
+void ns_serve_file(Server* server, const char* match, const char* path){
+    RouteHandler r = {.match = match, .method = GET, .handler = ns_file_handler, .param=(route_handler_param)path};
+    VEC_Push(server->handlers, &r);
 }
 
 int ns_run_thread_pool(void* server_arg){
