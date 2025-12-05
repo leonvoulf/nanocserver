@@ -63,17 +63,19 @@ typedef void(*json_parser_t)(Node* node, void* out, size_t elem_s, JsonParser* p
 // API
 Node* create_nodes_from_parent(const char* buffer, size_t buffer_len, int* error_code, JsonParser* parser);
 void free_json(Node* output_node, bool free_root, JsonParser* parser);
-size_t output_node(Node* node, char* buffer, size_t buffer_max, size_t cur_pos, size_t cur_indent, size_t add_indent);
+size_t json_output_node(Node* node, char* buffer, size_t buffer_max, size_t add_indent);
 size_t json_approximate_size(Node* node, size_t add_indent);
 void json_init_node(Node* node, NodeType type);
 void json_parse_array(Node* node, void* out, json_parser_t parse_cb, size_t elem_s, JsonParser* parser);
 void json_parse_integral(Node* node, void* out, size_t elem_s, JsonParser* parser);
 void json_parse_floating(Node* node, void* out, size_t elem_s, JsonParser* parser);
 void json_parse_string(Node* node, void* out, size_t elem_s, JsonParser* parser);
+void json_parse_chars(Node* node, void* out, size_t elem_s, JsonParser* parser);
 void json_parse__Bool(Node* node, void* out, size_t elem_s, JsonParser* parser);
 void json_serialize_integral(Node* node, void* buf, size_t elem_s, JsonParser* parser);
 void json_serialize_floating(Node* node, void* buf, size_t elem_s, JsonParser* parser);
 void json_serialize_string(Node* node, void* buf, size_t elem_s, JsonParser* parser);
+void json_serialize_chars(Node* node, void* buf, size_t elem_s, JsonParser* parser);
 void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* parser);
 
 #define NJ_ARRAY(type) nj_array_ ##type
@@ -703,7 +705,7 @@ size_t json_approximate_size(Node* node, size_t add_indent){
     for(size_t i = 0; i < node->children.count; i++){
         total_size += json_approximate_size(&node->children.start[i], add_indent)+add_indent;
     }
-    return strnlen(node->key, 1024) + total_size + 6;
+    return (node->key == NULL ? 0 : strnlen(node->key, 1024)) + total_size + 6;
 }
 
 size_t output_node(Node* node, char* buffer, size_t buffer_max, size_t cur_pos, size_t cur_indent, size_t add_indent){
@@ -777,6 +779,12 @@ size_t output_node(Node* node, char* buffer, size_t buffer_max, size_t cur_pos, 
     return 0; // SET ERROR
 }
 
+size_t json_output_node(Node* node, char* buffer, size_t buffer_max, size_t add_indent){
+    size_t node_size = output_node(node, buffer, buffer_max, 0, 0, add_indent);
+    buffer[node_size] = '\0';
+    return node_size;
+}
+
 void json_parse_array(Node* node, void* out, json_parser_t parse_cb, size_t elem_s, JsonParser* parser){
     if(node->type == FIELD){
         json_parse_array(&node->children.start[0], out, parse_cb, elem_s, parser);
@@ -832,6 +840,16 @@ void json_parse_string(Node* node, void* out, size_t elem_s, JsonParser* parser)
         *(char**)out = parser->allocator.alloc(parser->allocator.context, l);
     }
     strcpy_tn(*(char**)out, l, node->key); // also potentially unsafe
+}
+
+void json_parse_chars(Node* node, void* out, size_t elem_s, JsonParser* parser){
+    if(node->type == FIELD){
+        json_parse_chars(&node->children.start[0], out, elem_s, parser);
+        return;
+    }
+    assert(node->flags == STRING && "Non strings cannot be parsed as string values");
+    size_t l = strnlen(node->key, elem_s)+1;
+    strcpy_tn((char*)out, l-1, node->key); // also potentially unsafe
 }
 
 void json_parse__Bool(Node* node, void* out, size_t elem_s, JsonParser* parser){
@@ -909,6 +927,21 @@ void json_serialize_string(Node* node, void* buf, size_t elem_s, JsonParser* par
     node->key = parser->allocator.alloc(parser->allocator.context, l); // ALLOCATION
     strcpy_tn((char *)node->key, l, b); // also potentially unsafe
 
+}
+
+void json_serialize_chars(Node* node, void* buf, size_t elem_s, JsonParser* parser){
+    if(node->type == FIELD){
+        VEC_Push_Al(node->children, &((Node){0}), (&(parser->allocator))); // ALLOCATION (IMPLICIT, (&(parser->allocator)))
+        json_serialize_chars(&node->children.start[0], buf, elem_s, parser);
+        return;
+    }
+    node->flags = STRING;
+    node->type = VALUE;
+    char* b = (char*)buf;
+    
+    size_t l = strnlen(b, elem_s)+1;
+    node->key = parser->allocator.alloc(parser->allocator.context, l); // ALLOCATION
+    strcpy_tn((char *)node->key, l-1, b); // also potentially unsafe
 }
 
 void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* parser){

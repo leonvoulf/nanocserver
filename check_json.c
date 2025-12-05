@@ -96,7 +96,7 @@ int check_json(int argc, char** argv){
                 fclose(f);
             }
             // buffer[0] = '\0';
-            // r = output_node(parent, buffer, 4096, 0, 0, 2);
+            // r = json_output_node(parent, buffer, 4096, 2);
             // buffer[r] = '\0';
             // printf("%s", buffer);
         }

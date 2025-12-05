@@ -74,7 +74,7 @@ int main(int argc, char** argv){
         return 1;
     }
     buffer[0] = '\0';
-    r = output_node(parent, buffer, 4096, 0, 0, 2);
+    r = json_output_node(parent, buffer, 4096, 2);
     buffer[r] = '\0';
     printf("%s", buffer);
     fclose(file);
@@ -97,7 +97,7 @@ int main(int argc, char** argv){
     Node node = {.type=OBJECT};
     NJ_SERIALIZE_NODE(B, &node, &b);
     memset(buffer, 0, 4096);
-    r = output_node(&node, buffer, 4096, 0, 0, 2);
+    r = json_output_node(&node, buffer, 4096, 2);
     buffer[r] = '\0';
     printf("%s\n\n", buffer);
 
@@ -107,7 +107,7 @@ int main(int argc, char** argv){
     VEC_Push(d.c_vec, &c1); VEC_Push(d.c_vec, &c2); VEC_Push(d.c_vec, &c3);
     NJ_SERIALIZE_NODE(D, &node, &d);
     memset(buffer, 0, 4096);
-    r = output_node(&node, buffer, 4096, 0, 0, 2);
+    r = json_output_node(&node, buffer, 4096, 2);
     buffer[r] = '\0';
     printf("%s\n", buffer);
 

@@ -67,8 +67,8 @@ static const char* status_names[] = {"Service Unavailable", "", "Unavailable For
            "Early Hints", "Processing", "Switching protocols", "Continue", "", "Bad Gateway", "", "", "Insufficient Storage", "", "", "",
             "Forbidden", "", "", "Request Timeout", "", "", "Payload Too Large", "Not Modified", "", "I'm a Teapot", "", "OK", "Locked", "",
              "Reset Content", "Precondition Required", "", "", "Switching protocols", "", "", "", "", "", "", "Internal Server Error", "", "",
-             "", "Range Not Satisfiable", "Temporary Redirect", "", "Misdirected Request", "", "Non-Authoritative Information", "Upgrade Required",
-             "HTTP Version Not Supported", "", "", "Not Extended", "Unauthorized", "", "", "Not Acceptable", "", "", "Length Required", "Found",
+             "", "Range Not Satisfiable", "Temporary Redirect", "", "Unauthorized", "", "Non-Authoritative Information", "Upgrade Required",
+             "HTTP Version Not Supported", "", "", "Not Extended", "Misdirected Request", "", "", "Not Acceptable", "", "", "Length Required", "Found",
                 "OK", "Already Reported", "Request Header Fields Too Large"};
 
 static const char* content_types[] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "application/javascript", "", "", "", "", "application/zip", "", "", "text/plain", "", "", "", "", "", "", "text/css", "", "", "", "application/vnd.rar", "text/csv", "", "", "application/xml", "image/svg+xml", "application/x-tar", "audio/wav", "", "", "", "", "image/jpeg", "", "", "font/ttf", "image/png", "", "image/x-icon", "application/octet-stream", "application/octet-stream", "application/vnd.ms-fontobject", "application/json", "", "application/wasm", "", "", "application/pdf", "", "", "", "image/gif", "application/ogg", "application/x-7z-compressed", "", "text/html", "", "", "", "", "", "", "image/jpeg", "", "", "video/webm", "font/woff", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "audio/mpeg", "", "", "", "", "", "", "video/mp4", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
@@ -116,6 +116,7 @@ typedef struct HTTPResponse {
     int status_code;
     const char* content_type;
     const char* body;
+    size_t body_length;
     bool borrowed;
     body_dealloc_t body_dealloc;
 
@@ -163,11 +164,11 @@ char** ns_parse_query_params(const HTTPRequest* request, char* buffer, size_t ma
 long ns_calc_sleep(Server* server);
 void ns_listen_incoming(Server* server);
 bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t count);
-char* ns_glue_response(HTTPResponse* res);
+char* ns_glue_response(HTTPResponse* res, size_t* response_size);
 void ns_send_response(HTTPResponse* res);
 HTTPResponse* ns_borrow_response(HTTPResponse* res); // gives up memory control of the response to the caller
-void ns_set_response_body(HTTPResponse* res, const char* content_type, const char* body);
-void ns_set_response_body_status(HTTPResponse* res, const char* content_type, const char* body, int status);
+void ns_set_response_body(HTTPResponse* res, const char* body, const char* content_type);
+void ns_set_response_body_status(HTTPResponse* res, const char* body, const char* content_type, int status);
 void ns_free_request_response(HTTPRequest* req, HTTPResponse* res);
 RouteHandler* ns_match_handler(Server* server, const HTTPRequest* req);
 ClientResult ns_handle_client(Server* server, SOCKET client_socket); // socket is ready for rw
@@ -517,6 +518,7 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
     char* cur_position = str_word(http_version_end, cur_length, &cur_length);
     while(!blank_line_found && cur_length > 0){
         char* header_name_end = str_search(':', cur_position, cur_length, &cur_length);
+        cur_length -= 1;
         char* header_value_start = str_word(header_name_end+1, cur_length, &cur_length);
         char* header_value_end = str_search('\n', header_value_start, cur_length, &cur_length);
 
@@ -525,8 +527,9 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
         assert(header_name_end-cur_position+1 > 0);
         
         char* value = (char*)malloc(header_value_end-header_value_start+1);
-        copystrn(value, header_value_start, header_value_end-header_value_start+1);
         assert(header_value_end-header_value_start+1 > 0);
+        size_t copy_total = header_value_end-header_value_start;
+        copystrn(value, header_value_start, header_value_end[-1] == '\r' ? copy_total : copy_total+1);
 
         Header h = {.key=key, .value=value};
         VEC_Push(req->headers, &h);
@@ -539,7 +542,6 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
                 break;
             } else if(header_value_end[i] == '\n'){ // an empty line
                 cur_position = str_word(header_value_end+i, cur_length-i, &cur_length);
-                cur_length -= i;
                 blank_line_found = true;
                 break;
             }
@@ -556,14 +558,14 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
     return true;
 }
 
-char* ns_glue_response(HTTPResponse* res){
-    size_t content_length = res->body != NULL ? strlen(res->body) : 0;
+char* ns_glue_response(HTTPResponse* res, size_t* response_size){
+    size_t content_length = res->body != NULL ? res->body_length != 0 ? res->body_length : strlen(res->body) : 0;
     size_t content_type_length = res->content_type != NULL ? strlen(res->content_type) : 0;
     size_t approx_size = res->headers.count * 512 + content_type_length + content_length + 64;
     char* glued_resp = (char*)malloc(approx_size); // ALLOCATION
     size_t cur_loc = 0;
-    cur_loc += snprintf(glued_resp + cur_loc, 32, "HTTP/1.1 %d %s\r\n", res->status_code, status_names[CODE_TO_NAME(res->status_code)]);
-    cur_loc += snprintf(glued_resp + cur_loc, 32, "Content-Length: %zd\r\n", content_length);
+    cur_loc += snprintf(glued_resp + cur_loc, 48, "HTTP/1.1 %d %s\r\n", res->status_code, status_names[CODE_TO_NAME(res->status_code)]);
+    cur_loc += snprintf(glued_resp + cur_loc, 48, "Content-Length: %zd\r\n", content_length);
     if(content_type_length > 0)
         cur_loc += snprintf(glued_resp + cur_loc, 32 + content_type_length, "Content-Type: %s\r\n", res->content_type);
     for(size_t i = 0; i < res->headers.count; i++)
@@ -572,14 +574,17 @@ char* ns_glue_response(HTTPResponse* res){
     glued_resp[cur_loc++] = '\r';
     glued_resp[cur_loc++] = '\n';
     if(content_length > 0){
-        strcpy(glued_resp + cur_loc, res->body);
+        memcpy(glued_resp + cur_loc, res->body, content_length);
+        glued_resp[cur_loc + content_length] = '\0';
     }
+    *response_size = cur_loc + content_length;
     return glued_resp;
 }  
 
 void ns_send_response(HTTPResponse* res){
-    char* full_resp = ns_glue_response(res);
-    int r = send(res->client_socket, full_resp, strlen(full_resp), 0);
+    size_t response_size = 0;
+    char* full_resp = ns_glue_response(res, &response_size);
+    int r = send(res->client_socket, full_resp, response_size, 0);
     free(full_resp); // ALLOCATION
     if(r < 0){
         handle_socket_error();
@@ -593,13 +598,13 @@ HTTPResponse* ns_borrow_response(HTTPResponse* res){ // gives up memory control 
     return new_resp;
 }
 
-void ns_set_response_body(HTTPResponse* res, const char* content_type, const char* body){
+void ns_set_response_body(HTTPResponse* res, const char* body, const char* content_type){
     res->content_type = content_type;
     res->body = body;
 }
 
-void ns_set_response_body_status(HTTPResponse* res, const char* content_type, const char* body, int status){
-    ns_set_response_body(res, content_type, body);
+void ns_set_response_body_status(HTTPResponse* res, const char* body, const char* content_type, int status){
+    ns_set_response_body(res, body, content_type);
     res->status_code = status;
 }
 
@@ -749,6 +754,7 @@ static void ns_file_handler(const HTTPRequest* req, HTTPResponse* res, route_han
     if(strlen(content_type) == 0){
         content_type = "application/octet-stream";
     }
+    res->body_length = file_size;
     res->content_type = content_type;
     res->status_code = 200;
 }
