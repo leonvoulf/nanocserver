@@ -768,6 +768,11 @@ static void ns_directory_handler(const HTTPRequest* req, HTTPResponse* res, rout
         return;
     }
 
+    if(strstr(req->path, "..") != NULL){
+        res->status_code = 400;
+        return;
+    }
+
     char* until_wildcard = strchr(directory_params->match, '*');
     if(until_wildcard == NULL){
         res->status_code = 404;

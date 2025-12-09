@@ -373,6 +373,28 @@ void json_serialize_nj_enum_##Type(Node* node, void* buf_raw, size_t elem_s, Jso
 #define NJ_SERIALIZE_NODE(Type, node, buf_raw, parser) json_serialize_##Type(node, (void*)buf_raw, sizeof(Type), parser)
 #define NJ_SERIALIZE_NODE_VECTOR(Type, node, out, parser) json_serialize_nj_vector_##Type(node, (void*)out, sizeof(Type), parser)
 
+#ifndef NJ_NO_VECTOR_DECLARATIONS
+    #define NJ_DECLARE_VECTOR_PARSE_SERIALIZE(Type) NJ_DECLARE_VECTOR_PARSE(Type); NJ_DECLARE_VECTOR_SERIALIZE(Type)
+
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(int);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(short);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(long);
+
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(int8_t);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(int16_t);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(int32_t);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(int64_t);
+
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(uint8_t);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(uint16_t);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(uint32_t);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(uint64_t);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(time_t);
+
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(float);
+    NJ_DECLARE_VECTOR_PARSE_SERIALIZE(double);
+#endif
+
 // DUBIOUS CODE GENERATION
 #ifdef NJ_INTEGRAL_ARRAY_DEFINITIONS
 #define json_serialize_int json_serialize_integral
@@ -689,10 +711,10 @@ Node* create_nodes_from_parent(const char* buffer, size_t buffer_len, int* error
 
 void free_json(Node* parent, bool free_root, JsonParser* parser){
     for(size_t i = 0; i < parent->children.count; i++)
-        free_json(&parent->children.start[i], false, parser);
+        free_json(&parent->children.start[i], false, parser); // CHANGE: should be true
     if(parent->children.start != NULL){
         parent->children.count = 0;
-        VEC_Free(parent->children);
+        VEC_Free_Al(parent->children, (&parser->allocator));
     }
     if(parent->key != NULL && !parent->static_key)
         parser->allocator.free(parser->allocator.context, (void*)parent->key);
