@@ -288,7 +288,7 @@ void* n_arena_allocator_realloc(void* allocator, void* start, size_t size){ // p
             to_skip += 0;
         }
 
-        if(!compare_and_swap_32((volatile* uint32_t)after_start, free_after, 0))
+        if(!compare_and_swap_32((volatile uint32_t*)after_start, free_after, 0))
             n_arena_allocator_realloc(allocator, start, size);
         
         char* after_new = (char*)cur + size + sizeof(uint32_t);
@@ -311,8 +311,8 @@ void* n_arena_allocator_realloc(void* allocator, void* start, size_t size){ // p
 
     uint32_t free_after = *(uint32_t*)after_start;
     if((((*(uint32_t*)after_start) & (uint32_t)(1 << 31)) == 0)){
-        if(compare_and_swap_32((volatile* uint32_t)after_start, free_after_old, 0))
-            compare_and_swap_32((volatile* uint32_t)cur, orig, to_skip + free_after);
+        if(compare_and_swap_32((volatile uint32_t*)after_start, free_after_old, 0))
+            compare_and_swap_32((volatile uint32_t*)cur, orig, to_skip + free_after);
     }
 
     if((char*)cur >= (char*)c->start + c->block_size || (char*)cur < (char*)c->start){
@@ -343,7 +343,7 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){ // proceed only if 
     arena_allocator_context* c = (arena_allocator_context*)allocator;
     
     void* orig = c->current;
-    void* cur = orig;
+    char* cur = orig;
     char* alloc_end = (char*)c->start + c->block_size; 
     size_t size_to_alloc = size + sizeof(uint32_t);
 
@@ -352,11 +352,11 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){ // proceed only if 
     while(cur < alloc_end - sizeof(uint32_t) && ((((*(uint32_t*)cur) & (uint32_t)(1 << 31)) > 0) || (((*(uint32_t*)cur) & (uint32_t)(~(1 << 31))) < size_to_alloc + sizeof(uint32_t)))){
         uint32_t to_skip = ((*(uint32_t*)cur) & (uint32_t)(~(1 << 31)));
         assert(to_skip > (sizeof(uint32_t)-1) && "Arena Memory Corruption");
-        cur = (char*)cur + to_skip;
+        cur = cur + to_skip;
     }
 
 
-    if(alloc_end - (char*)cur < (ptrdiff_t)size_to_alloc){ // locked
+    if(alloc_end - cur < (ptrdiff_t)size_to_alloc){ // locked
         if(!c->flexible_memory)
             return NULL; // not enough memory
         while(!compare_and_swap_64(&c->block_allocation_lock, 0, 1));
@@ -373,7 +373,7 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){ // proceed only if 
         
         size_t old_size = c->total_memory;
         c->total_memory *= 2;
-        size_t offset = (char*)cur - (char*)c->start;
+        size_t offset = cur - (char*)c->start;
         void* new_seg = NC_ALLOCATE(2*sizeof(size_t)+old_size);
         *(uintptr_t*)end_of_block = (uintptr_t)new_seg;
         c->start = ((size_t*)new_seg+1);
@@ -389,11 +389,11 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){ // proceed only if 
     }
     uint32_t cur_free = *(uint32_t*)cur;
 
-    if((((char*)cur - (char*)c->start) > 2229100) && (((char*)cur - (char*)c->start) <= 2229250)){
+    if(((cur - (char*)c->start) > 2229100) && ((cur - (char*)c->start) <= 2229250)){
         size_to_alloc += 0;
     }
 
-    if(!compare_and_swap_32((volatile* uint32_t)cur, cur_free, ((uint32_t)(1 << 31)) | size_to_alloc))
+    if(!compare_and_swap_32((volatile uint32_t*)cur, cur_free, ((uint32_t)(1 << 31)) | size_to_alloc))
         n_arena_allocator_alloc(allocator, size);
     
     uint32_t free_after_alloc = cur_free - size_to_alloc;
@@ -401,9 +401,9 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){ // proceed only if 
         //printf("free after current arena alloc %lu\n", free_after_alloc);
         *(uint32_t*)((char*)cur + size_to_alloc) = free_after_alloc; // cas
     }
-    compare_and_swap_ptr((volatile void**)&c->current, orig, ((char*)cur + size_to_alloc));
+    compare_and_swap_ptr((volatile void**)&c->current, orig, (cur + size_to_alloc));
 
-    return (void*)((char*)cur + sizeof(uint32_t));
+    return (void*)(cur + sizeof(uint32_t));
 }
 
 bool n_arena_allocator_free(void* allocator, void* start){ // locked

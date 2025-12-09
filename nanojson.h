@@ -174,7 +174,7 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
 
 #define NJ_SERIALIZE_BREAKDOWN(...) NJ_M_EXPAND(NJ_GET_M(__VA_ARGS__, NJ_SERIALIZE_BREAKDOWN_31, NJ_SERIALIZE_BREAKDOWN_31, NJ_SERIALIZE_BREAKDOWN_30, NJ_SERIALIZE_BREAKDOWN_30, NJ_SERIALIZE_BREAKDOWN_29, NJ_SERIALIZE_BREAKDOWN_29, NJ_SERIALIZE_BREAKDOWN_28, NJ_SERIALIZE_BREAKDOWN_28, NJ_SERIALIZE_BREAKDOWN_27, NJ_SERIALIZE_BREAKDOWN_27, NJ_SERIALIZE_BREAKDOWN_26, NJ_SERIALIZE_BREAKDOWN_26, NJ_SERIALIZE_BREAKDOWN_25, NJ_SERIALIZE_BREAKDOWN_25, NJ_SERIALIZE_BREAKDOWN_24, NJ_SERIALIZE_BREAKDOWN_24, NJ_SERIALIZE_BREAKDOWN_23, NJ_SERIALIZE_BREAKDOWN_23, NJ_SERIALIZE_BREAKDOWN_22, NJ_SERIALIZE_BREAKDOWN_22, NJ_SERIALIZE_BREAKDOWN_21, NJ_SERIALIZE_BREAKDOWN_21, NJ_SERIALIZE_BREAKDOWN_20, NJ_SERIALIZE_BREAKDOWN_20, NJ_SERIALIZE_BREAKDOWN_19, NJ_SERIALIZE_BREAKDOWN_19, NJ_SERIALIZE_BREAKDOWN_18, NJ_SERIALIZE_BREAKDOWN_18, NJ_SERIALIZE_BREAKDOWN_17, NJ_SERIALIZE_BREAKDOWN_17, NJ_SERIALIZE_BREAKDOWN_16, NJ_SERIALIZE_BREAKDOWN_16, NJ_SERIALIZE_BREAKDOWN_15, NJ_SERIALIZE_BREAKDOWN_15, NJ_SERIALIZE_BREAKDOWN_14, NJ_SERIALIZE_BREAKDOWN_14, NJ_SERIALIZE_BREAKDOWN_13, NJ_SERIALIZE_BREAKDOWN_13, NJ_SERIALIZE_BREAKDOWN_12, NJ_SERIALIZE_BREAKDOWN_12, NJ_SERIALIZE_BREAKDOWN_11, NJ_SERIALIZE_BREAKDOWN_11, NJ_SERIALIZE_BREAKDOWN_10, NJ_SERIALIZE_BREAKDOWN_10, NJ_SERIALIZE_BREAKDOWN_9, NJ_SERIALIZE_BREAKDOWN_9, NJ_SERIALIZE_BREAKDOWN_8, NJ_SERIALIZE_BREAKDOWN_8, NJ_SERIALIZE_BREAKDOWN_7, NJ_SERIALIZE_BREAKDOWN_7, NJ_SERIALIZE_BREAKDOWN_6, NJ_SERIALIZE_BREAKDOWN_6, NJ_SERIALIZE_BREAKDOWN_5, NJ_SERIALIZE_BREAKDOWN_5, NJ_SERIALIZE_BREAKDOWN_4, NJ_SERIALIZE_BREAKDOWN_4, NJ_SERIALIZE_BREAKDOWN_3, NJ_SERIALIZE_BREAKDOWN_3, NJ_SERIALIZE_BREAKDOWN_2, NJ_SERIALIZE_BREAKDOWN_2, NJ_SERIALIZE_BREAKDOWN_1, NJ_SERIALIZE_BREAKDOWN_1)(__VA_ARGS__))
 
-#define NJ_DECLARE_PARSE(Type) void json_parse_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser);  void json_parse_nj_array_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser); void json_parse_nj_ptr_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser);
+#define NJ_DECLARE_PARSE(Type) void json_parse_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser); void json_parse_nj_array_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser); void json_parse_nj_ptr_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser);
 #define NJ_DECLARE_VECTOR_PARSE(Type) void json_parse_nj_vector_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser);
 
 // ASSERT
@@ -319,6 +319,11 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
 #define NJ_DEFINE_VECTOR_PARSE_SERIALIZE(Type) NJ_DEFINE_VECTOR_PARSE(Type) NJ_DEFINE_VECTOR_SERIALIZE(Type)
 #define NJ_DEFINE_MAPPING_PARSE_SERIALIZE(Type) NJ_DEFINE_MAPPING_PARSE(Type) NJ_DEFINE_MAPPING_SERIALIZE(Type)
 
+#define NJ_DECLARE_MAPPING_PARSE(Type) void json_parse_nj_mapping_ ##Type(Node* node, void *out_raw, size_t elem_s, JsonParser* parser);
+#define NJ_DECLARE_MAPPING_SERIALIZE(Type) void json_serialize_nj_mapping_ ##Type(Node* node, void *buf_raw, size_t elem_s, JsonParser* parser);
+#define NJ_DECLARE_MAPPING_PARSE_SERIALIZE(Type) NJ_DECLARE_MAPPING_PARSE(Type) NJ_DECLARE_MAPPING_SERIALIZE(Type)
+
+
 #define NJ_DEFINE_BASIC_TYPE_ARRAY_PARSE(Type, underlying_parse) void json_parse_nj_array_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser) { \
         if(node->type == FIELD){ \
             json_parse_nj_array_ ##Type(node->children.start, out_raw, elem_s, parser); \
@@ -327,6 +332,15 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
         assert(node->type == ARRAY && "Non array passed to array parser"); \
         for(size_t i = 0; i < node->children.count; i++) \
             underlying_parse(&node->children.start[i], (void*)((char*)out_raw+i*sizeof(Type)), sizeof(Type), parser);    \
+    } \
+    void json_parse_nj_ptr_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser) { \
+        if(node->type == FIELD){ \
+            json_parse_nj_ptr_ ##Type(node->children.start, out_raw, elem_s, parser); \
+            return; \
+        } \
+        Type* t = parser->allocator.alloc(parser->allocator.context, sizeof(Type)); \
+        (*(Type**)out_raw) = t; \
+        underlying_parse(node, (void*)out_raw, sizeof(Type), parser);    \
     }
 
 #define NJ_DEFINE_BASIC_TYPE_ARRAY_SERIALIZE(Type, underlying_serialize) void json_serialize_nj_array_ ##Type(Node* node, void* buf_raw, size_t elem_s, JsonParser* parser) { \
@@ -342,6 +356,15 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
             VEC_Push_Al(node->children, &node_n, (&(parser->allocator))); \
             underlying_serialize(&node->children.start[i], (void*)((char*)buf_raw+i*sizeof(Type)), sizeof(Type), parser); \
         } \
+    } \
+    void json_serialize_nj_ptr_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser) { \
+        if(node->type == FIELD){ \
+            Node n = (Node){.type=OBJECT, .key="NR", .static_key=true}; \
+            VEC_Push_Al(node->children, &n, (&(parser->allocator))); \
+            json_serialize_nj_ptr_ ##Type(node->children.start, out_raw, elem_s, parser); \
+            return; \
+        } \
+        underlying_serialize(node, (void*)out_raw, sizeof(Type), parser);    \
     }
 
 #define NJ_DECLARE_PARSE_SERIALIZE_ENUM(Type) void json_parse_nj_enum_##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser);  json_serialize_nj_enum_##Type(Node* node, void* buf_raw, size_t elem_s, JsonParser* parser);
@@ -373,8 +396,10 @@ void json_serialize_nj_enum_##Type(Node* node, void* buf_raw, size_t elem_s, Jso
 #define NJ_SERIALIZE_NODE(Type, node, buf_raw, parser) json_serialize_##Type(node, (void*)buf_raw, sizeof(Type), parser)
 #define NJ_SERIALIZE_NODE_VECTOR(Type, node, out, parser) json_serialize_nj_vector_##Type(node, (void*)out, sizeof(Type), parser)
 
-#ifndef NJ_NO_VECTOR_DECLARATIONS
+#ifndef NJ_NO_VECTOR_TYPES
+    #define NJ_VECTOR_TYPES_GUARD
     #define NJ_DECLARE_VECTOR_PARSE_SERIALIZE(Type) NJ_DECLARE_VECTOR_PARSE(Type); NJ_DECLARE_VECTOR_SERIALIZE(Type)
+    #define NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(Type) void json_serialize_nj_array_ ##Type(Node* node, void* buf_raw, size_t elem_s, JsonParser* parser); void json_serialize_nj_ptr_ ##Type(Node* node, void* buf_raw, size_t elem_s, JsonParser* parser); void json_parse_nj_array_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser); void json_parse_nj_ptr_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser)
 
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(int);
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(short);
@@ -391,42 +416,120 @@ void json_serialize_nj_enum_##Type(Node* node, void* buf_raw, size_t elem_s, Jso
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(uint64_t);
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(time_t);
 
+    #define json_serialize_int json_serialize_integral;
+    #define json_serialize_short json_serialize_integral;
+    #define json_serialize_long json_serialize_integral;
+
+    #define json_serialize_int8_t json_serialize_integral;
+    #define json_serialize_int16_t json_serialize_integral;
+    #define json_serialize_int32_t json_serialize_integral;
+    #define json_serialize_int64_t json_serialize_integral;
+
+    #define json_serialize_uint8_t json_serialize_integral;
+    #define json_serialize_uint16_t json_serialize_integral;
+    #define json_serialize_uint32_t json_serialize_integral;
+    #define json_serialize_uint64_t json_serialize_integral;
+    #define json_serialize_time_t json_serialize_integral;
+
+    #define json_serialize_float json_serialize_floating;
+    #define json_serialize_double json_serialize_floating;
+
+    #define json_serialize_int json_serialize_integral;
+    #define json_serialize_short json_serialize_integral;
+    #define json_serialize_long json_serialize_integral;
+
+    #define json_parse_int json_parse_integral;
+    #define json_parse_short json_parse_integral;
+    #define json_parse_long json_parse_integral;
+
+    #define json_parse_int8_t json_parse_integral;
+    #define json_parse_int16_t json_parse_integral;
+    #define json_parse_int32_t json_parse_integral;
+    #define json_parse_int64_t json_parse_integral;
+
+    #define json_parse_uint8_t json_parse_integral;
+    #define json_parse_uint16_t json_parse_integral;
+    #define json_parse_uint32_t json_parse_integral;
+    #define json_parse_uint64_t json_parse_integral;
+    #define json_parse_time_t json_parse_integral;
+
+    #define json_parse_float json_parse_floating;
+    #define json_parse_double json_parse_floating;
+
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(float);
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(double);
+
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(int);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(short);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(long);
+
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(int8_t);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(int16_t);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(int32_t);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(int64_t);
+
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(uint8_t);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(uint16_t);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(uint32_t);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(uint64_t);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(time_t);
+
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(float);
+    NJ_DECLARE_PARSE_SERIALIZE_ARRAY_PTR(double);
 #endif
 
-// DUBIOUS CODE GENERATION
-#ifdef NJ_INTEGRAL_ARRAY_DEFINITIONS
-#define json_serialize_int json_serialize_integral
-#define json_parse_int json_parse_integral
-#define NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(x) NJ_DEFINE_BASIC_TYPE_ARRAY_PARSE(x, json_parse_integral) NJ_DEFINE_BASIC_TYPE_ARRAY_SERIALIZE(x, json_serialize_integral)
-
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(short);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(long);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(uint8_t);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(uint16_t);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(uint32_t);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(uint64_t);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int8_t);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int16_t);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int32_t);
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int64_t); 
-NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(time_t); 
-
-NJ_DEFINE_BASIC_TYPE_ARRAY_PARSE(float, json_parse_floating);
-NJ_DEFINE_BASIC_TYPE_ARRAY_PARSE(double, json_parse_floating);
-
-NJ_DEFINE_BASIC_TYPE_ARRAY_SERIALIZE(float, json_serialize_floating);
-NJ_DEFINE_BASIC_TYPE_ARRAY_SERIALIZE(double, json_serialize_floating);
-
-#endif
 
 // IMPLEMENTATION STARTS HERE
 
 #ifdef NJ_IMPLEMENTATION
 #ifndef NJ_IMPLEMENTATION_GUARD
 #define NJ_IMPLEMENTATION_GUARD
+
+
+// DUBIOUS CODE GENERATION
+    #ifndef NJ_NO_VECTOR_TYPES
+
+        #define NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(x) NJ_DEFINE_BASIC_TYPE_ARRAY_PARSE(x, json_parse_integral) NJ_DEFINE_BASIC_TYPE_ARRAY_SERIALIZE(x, json_serialize_integral)
+
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(int);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(short);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(long);
+
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(int8_t);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(int16_t);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(int32_t);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(int64_t);
+
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(uint8_t);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(uint16_t);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(uint32_t);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(uint64_t);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(time_t);
+
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(float);
+        NJ_DEFINE_VECTOR_PARSE_SERIALIZE(double);
+
+
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(short);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(long);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(uint8_t);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(uint16_t);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(uint32_t);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(uint64_t);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int8_t);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int16_t);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int32_t);
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(int64_t); 
+        NJ_DEFINE_INTEGRAL_ARRAY_TWO_WAY(time_t); 
+
+        NJ_DEFINE_BASIC_TYPE_ARRAY_PARSE(float, json_parse_floating);
+        NJ_DEFINE_BASIC_TYPE_ARRAY_PARSE(double, json_parse_floating);
+
+        NJ_DEFINE_BASIC_TYPE_ARRAY_SERIALIZE(float, json_serialize_floating);
+        NJ_DEFINE_BASIC_TYPE_ARRAY_SERIALIZE(double, json_serialize_floating);
+
+    #endif
 
 void json_init_node(Node* node, NodeType type){
     *node = (Node){.type=type, .key="R",  .static_key=true};

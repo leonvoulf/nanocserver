@@ -1,4 +1,3 @@
-#define NJ_INTEGRAL_ARRAY_DEFINITIONS
 #define WIN32_LEAN_AND_MEAN
 #include "Windows.h"
 #include "stdio.h"

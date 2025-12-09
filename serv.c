@@ -4,7 +4,6 @@
 #define NJ_IMPLEMENTATION
 #define NS_IMPLEMENTATION
 #include "nanoserv.h"
-#define NJ_INTEGRAL_ARRAY_DEFINITIONS
 #include "nanojson.h"
 
 typedef struct A {
@@ -48,7 +47,7 @@ void gen_handle(HTTPRequest* req, HTTPResponse* res){
 int main(int argc, char** argv){
 
     arena_allocator arena;
-    n_arena_allocator_init(&arena, 256);
+    n_arena_allocator_init(&arena, 256, false);
     char* al = arena.alloc(arena.context, 32);
     strcpy(al, "This is a string");
     int* somenum = arena.alloc(arena.context, sizeof(int));
@@ -82,7 +81,7 @@ int main(int argc, char** argv){
     memset(buffer, 0, sizeof(buffer));
     file = fopen("./json_check/a.json", "r");
     size_t r2 = fread(buffer, 1, sizeof(buffer), file);
-    parent = create_nodes_from_parent(buffer, r2, &errc);
+    parent = create_nodes_from_parent(buffer, r2, &errc, NULL);
     if(errc != -1){
         printf("Error on parsing: %d", errc);
         return 1;
