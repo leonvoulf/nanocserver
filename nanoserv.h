@@ -786,8 +786,8 @@ static void ns_directory_handler(const HTTPRequest* req, HTTPResponse* res, rout
         res->status_code = 500;
         return;
     }
-    strncat(path, directory_params->dirn, sizeof(path));
-    strncat(path, directory_name_start, sizeof(path));
+    strncat(path, directory_params->dirn, l1+1);
+    strncat(path, directory_name_start, l2+1);
     ns_file_handler(req, res, (route_handler_param)path);
 }
 

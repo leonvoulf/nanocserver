@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include "Windows.h"
 #include "stdio.h"
+#define NJ_STRUCT_IMPLEMENTATION
 #include "nanojson.h"
 
 #define CHECK_FOLDER L"./json_check/"
@@ -14,7 +15,11 @@ typedef struct {
     char* bio;
     double version;
 } NameLanguageBio;
+NJ_STRUCT_WITH_VEC(A, a, int, b, int, c, int);
 
+typedef char* string;
+
+NJ_STRUCT_WITH_VEC(B, a, NJ_VEC(A), b, string);
 
 NJ_DEFINE_PARSE(NameLanguageBio, name, string, language, string, id, string, bio, string, version, floating);
 NJ_DEFINE_VECTOR_PARSE(NameLanguageBio);

@@ -15,29 +15,35 @@
 
 #define A_VEC(Type) struct { Type* start; size_t count; size_t capacity; } // anonymous vector
 #define VEC(Type) typedef struct Type##_Vec { Type* start; size_t count; size_t capacity; } Type##_Vec;
-#define VEC_Push(vec, value) if(vec.count >= vec.capacity) { \
+#define VEC_Push(vec, value) do { if(vec.count >= vec.capacity) { \
                                     vec.capacity =  vec.capacity == 0 ? 1 : vec.capacity < 16 ? vec.capacity << 1 : vec.capacity * 1.5; \
-                                    vec.start = NC_REALLOCATE((void*)vec.start, vec.capacity*sizeof(*vec.start));} \
-                            memcpy((void*)(vec.start + vec.count++), (void*)value, sizeof(*value))
-#define VEC_Push_Al(vec, value, allocator) if(vec.count >= vec.capacity) { \
+                                    vec.start = NC_REALLOCATE((void*)vec.start, vec.capacity*sizeof(*vec.start)); } \
+                            memcpy((void*)(vec.start + vec.count++), (void*)value, sizeof(*value)); } while(0)
+#define VEC_Push_Al(vec, value, allocator) do { if(vec.count >= vec.capacity) { \
                                     vec.capacity =  vec.capacity == 0 ? 1 : vec.capacity < 16 ? vec.capacity << 1 : vec.capacity * 1.5; \
                                     vec.start = allocator->realloc(allocator->context, (void*)vec.start, vec.capacity*sizeof(*vec.start));} \
-                            memcpy((void*)(vec.start + vec.count++), (void*)value, sizeof(*value))
+                            memcpy((void*)(vec.start + vec.count++), (void*)value, sizeof(*value)); } while(0)
 
-#define VEC_Push_Ptr(vec, value) if(vec->count >= vec->capacity) { \
+#define VEC_Push_Ptr(vec, value) do { if(vec->count >= vec->capacity) { \
                                     vec->capacity =  vec->capacity == 0 ? 1 : vec->capacity < 16 ? vec->capacity << 1 : vec->capacity * 1.5; \
                                     vec->start = NC_REALLOCATE((void*)vec->start, vec->capacity*sizeof(*vec->start));} \
-                            memcpy((void*)(vec->start + vec->count++), (void*)value, sizeof(*value))
+                            memcpy((void*)(vec->start + vec->count++), (void*)value, sizeof(*value)); } while(0)
 
-#define VEC_Push_Ptr_Al(vec, value, allocator) if(vec->count >= vec->capacity) { \
+#define VEC_Push_Ptr_Al(vec, value, allocator) do { if(vec->count >= vec->capacity) { \
                                     vec->capacity =  vec->capacity == 0 ? 1 : vec->capacity < 16 ? vec->capacity << 1 : vec->capacity * 1.5; \
                                     vec->start = allocator->realloc(allocator->context, (void*)vec->start, vec->capacity*sizeof(*vec->start));} \
-                            memcpy((void*)(vec->start + vec->count++), (void*)value, sizeof(*value))
+                            memcpy((void*)(vec->start + vec->count++), (void*)value, sizeof(*value)); } while(0)
 
 #define VEC_Get(vec, index) vec.start + index
-#define VEC_Remove(vec, index) if(index < vec.count - 1) {memmove((void*)(vec.start + index), (void*)(vec.start + (index+1)), (vec.count - 1 - index)*sizeof(*vec.start));}; vec.count--
-#define VEC_Free(vec) if(vec.start != NULL) NC_FREE(vec.start)
-#define VEC_Free_Al(vec, allocator) if(vec.start != NULL) allocator->free(allocator->context, vec.start)
+#define VEC_Remove(vec, index) do { if(index < vec.count - 1) {memmove((void*)(vec.start + index), (void*)(vec.start + (index+1)), (vec.count - 1 - index)*sizeof(*vec.start));}; vec.count--; } while(0)
+#define VEC_Free(vec) do { if(vec.start != NULL) \
+                             NC_FREE(vec.start); \
+                            memset(&vec, 0, sizeof(vec)); \
+                         } while(0);
+#define VEC_Free_Al(vec, allocator) do { if(vec.start != NULL) \
+                             allocator->free(allocator->context, vec.start); \
+                            memset(&vec, 0, sizeof(vec)); \
+                         } while(0);
 
 #define VEC_Init_Reserve(vec, cap) do { vec.start = NC_ALLOCATE(cap*sizeof(*vec.start)); vec.capacity=cap; } while(0); 
 #define VEC_Init_Reserve_Al(vec, cap, allocator) do { vec.start = allocator->alloc(allocator->context, cap*sizeof(*vec.start)); vec.capacity=cap; } while(0); 

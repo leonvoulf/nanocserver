@@ -96,83 +96,48 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
         field_marked[ordinal] = true; \
     }
 
-#define NJ_PARSE_BREAKDOWN_1(v1, v2) NJ_CHECK_PARSE(v1, v2, 0)
-#define NJ_PARSE_BREAKDOWN_2(v1, v2, v3, v4) NJ_PARSE_BREAKDOWN_1(v1, v2) NJ_CHECK_PARSE(v3, v4, 1)
-#define NJ_PARSE_BREAKDOWN_3(v1, v2, v3, v4, v5, v6) NJ_PARSE_BREAKDOWN_2(v1, v2, v3, v4) NJ_CHECK_PARSE(v5, v6, 2)
-#define NJ_PARSE_BREAKDOWN_4(v1, v2, v3, v4, v5, v6, v7, v8) NJ_PARSE_BREAKDOWN_3(v1, v2, v3, v4, v5, v6) NJ_CHECK_PARSE(v7, v8, 3)
-#define NJ_PARSE_BREAKDOWN_5(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) NJ_PARSE_BREAKDOWN_4(v1, v2, v3, v4, v5, v6, v7, v8) NJ_CHECK_PARSE(v9, v10, 4)
-#define NJ_PARSE_BREAKDOWN_6(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12) NJ_PARSE_BREAKDOWN_5(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) NJ_CHECK_PARSE(v11, v12, 5)
-#define NJ_PARSE_BREAKDOWN_7(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14) NJ_PARSE_BREAKDOWN_6(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12) NJ_CHECK_PARSE(v13, v14, 6)
-#define NJ_PARSE_BREAKDOWN_8(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16) NJ_PARSE_BREAKDOWN_7(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14) NJ_CHECK_PARSE(v15, v16, 7)
-#define NJ_PARSE_BREAKDOWN_9(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18) NJ_PARSE_BREAKDOWN_8(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16) NJ_CHECK_PARSE(v17, v18, 8)
-#define NJ_PARSE_BREAKDOWN_10(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20) NJ_PARSE_BREAKDOWN_9(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18) NJ_CHECK_PARSE(v19, v20, 9)
-#define NJ_PARSE_BREAKDOWN_11(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22) NJ_PARSE_BREAKDOWN_10(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20) NJ_CHECK_PARSE(v21, v22, 10)
-#define NJ_PARSE_BREAKDOWN_12(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24) NJ_PARSE_BREAKDOWN_11(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22) NJ_CHECK_PARSE(v23, v24, 11)
-#define NJ_PARSE_BREAKDOWN_13(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26) NJ_PARSE_BREAKDOWN_12(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24) NJ_CHECK_PARSE(v25, v26, 12)
-#define NJ_PARSE_BREAKDOWN_14(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28) NJ_PARSE_BREAKDOWN_13(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26) NJ_CHECK_PARSE(v27, v28, 13)
-#define NJ_PARSE_BREAKDOWN_15(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30) NJ_PARSE_BREAKDOWN_14(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28) NJ_CHECK_PARSE(v29, v30, 14)
-#define NJ_PARSE_BREAKDOWN_16(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32) NJ_PARSE_BREAKDOWN_15(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30) NJ_CHECK_PARSE(v31, v32, 15)
-#define NJ_PARSE_BREAKDOWN_17(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34) NJ_PARSE_BREAKDOWN_16(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32) NJ_CHECK_PARSE(v33, v34, 16)
-#define NJ_PARSE_BREAKDOWN_18(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36) NJ_PARSE_BREAKDOWN_17(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34) NJ_CHECK_PARSE(v35, v36, 17)
-#define NJ_PARSE_BREAKDOWN_19(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38) NJ_PARSE_BREAKDOWN_18(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36) NJ_CHECK_PARSE(v37, v38, 18)
-#define NJ_PARSE_BREAKDOWN_20(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40) NJ_PARSE_BREAKDOWN_19(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38) NJ_CHECK_PARSE(v39, v40, 19)
-#define NJ_PARSE_BREAKDOWN_21(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42) NJ_PARSE_BREAKDOWN_20(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40) NJ_CHECK_PARSE(v41, v42, 20)
-#define NJ_PARSE_BREAKDOWN_22(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44) NJ_PARSE_BREAKDOWN_21(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42) NJ_CHECK_PARSE(v43, v44, 21)
-#define NJ_PARSE_BREAKDOWN_23(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46) NJ_PARSE_BREAKDOWN_22(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44) NJ_CHECK_PARSE(v45, v46, 22)
-#define NJ_PARSE_BREAKDOWN_24(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48) NJ_PARSE_BREAKDOWN_23(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46) NJ_CHECK_PARSE(v47, v48, 23)
-#define NJ_PARSE_BREAKDOWN_25(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50) NJ_PARSE_BREAKDOWN_24(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48) NJ_CHECK_PARSE(v49, v50, 24)
-#define NJ_PARSE_BREAKDOWN_26(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52) NJ_PARSE_BREAKDOWN_25(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50) NJ_CHECK_PARSE(v51, v52, 25)
-#define NJ_PARSE_BREAKDOWN_27(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54) NJ_PARSE_BREAKDOWN_26(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52) NJ_CHECK_PARSE(v53, v54, 26)
-#define NJ_PARSE_BREAKDOWN_28(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56) NJ_PARSE_BREAKDOWN_27(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54) NJ_CHECK_PARSE(v55, v56, 27)
-#define NJ_PARSE_BREAKDOWN_29(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58) NJ_PARSE_BREAKDOWN_28(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56) NJ_CHECK_PARSE(v57, v58, 28)
-#define NJ_PARSE_BREAKDOWN_30(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60) NJ_PARSE_BREAKDOWN_29(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58) NJ_CHECK_PARSE(v59, v60, 29)
-#define NJ_PARSE_BREAKDOWN_31(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60, v61, v62) NJ_PARSE_BREAKDOWN_30(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60) NJ_CHECK_PARSE(v61, v62, 30)
-
 #define NJ_M_EXPAND(x) x
 #define NJ_GET_M(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, _62, NAME, ...) NAME
-#define NJ_PARSE_BREAKDOWN(...) NJ_M_EXPAND(NJ_GET_M(__VA_ARGS__, NJ_PARSE_BREAKDOWN_31, NJ_PARSE_BREAKDOWN_31, NJ_PARSE_BREAKDOWN_30, NJ_PARSE_BREAKDOWN_30, NJ_PARSE_BREAKDOWN_29, NJ_PARSE_BREAKDOWN_29, NJ_PARSE_BREAKDOWN_28, NJ_PARSE_BREAKDOWN_28, NJ_PARSE_BREAKDOWN_27, NJ_PARSE_BREAKDOWN_27, NJ_PARSE_BREAKDOWN_26, NJ_PARSE_BREAKDOWN_26, NJ_PARSE_BREAKDOWN_25, NJ_PARSE_BREAKDOWN_25, NJ_PARSE_BREAKDOWN_24, NJ_PARSE_BREAKDOWN_24, NJ_PARSE_BREAKDOWN_23, NJ_PARSE_BREAKDOWN_23, NJ_PARSE_BREAKDOWN_22, NJ_PARSE_BREAKDOWN_22, NJ_PARSE_BREAKDOWN_21, NJ_PARSE_BREAKDOWN_21, NJ_PARSE_BREAKDOWN_20, NJ_PARSE_BREAKDOWN_20, NJ_PARSE_BREAKDOWN_19, NJ_PARSE_BREAKDOWN_19, NJ_PARSE_BREAKDOWN_18, NJ_PARSE_BREAKDOWN_18, NJ_PARSE_BREAKDOWN_17, NJ_PARSE_BREAKDOWN_17, NJ_PARSE_BREAKDOWN_16, NJ_PARSE_BREAKDOWN_16, NJ_PARSE_BREAKDOWN_15, NJ_PARSE_BREAKDOWN_15, NJ_PARSE_BREAKDOWN_14, NJ_PARSE_BREAKDOWN_14, NJ_PARSE_BREAKDOWN_13, NJ_PARSE_BREAKDOWN_13, NJ_PARSE_BREAKDOWN_12, NJ_PARSE_BREAKDOWN_12, NJ_PARSE_BREAKDOWN_11, NJ_PARSE_BREAKDOWN_11, NJ_PARSE_BREAKDOWN_10, NJ_PARSE_BREAKDOWN_10, NJ_PARSE_BREAKDOWN_9, NJ_PARSE_BREAKDOWN_9, NJ_PARSE_BREAKDOWN_8, NJ_PARSE_BREAKDOWN_8, NJ_PARSE_BREAKDOWN_7, NJ_PARSE_BREAKDOWN_7, NJ_PARSE_BREAKDOWN_6, NJ_PARSE_BREAKDOWN_6, NJ_PARSE_BREAKDOWN_5, NJ_PARSE_BREAKDOWN_5, NJ_PARSE_BREAKDOWN_4, NJ_PARSE_BREAKDOWN_4, NJ_PARSE_BREAKDOWN_3, NJ_PARSE_BREAKDOWN_3, NJ_PARSE_BREAKDOWN_2, NJ_PARSE_BREAKDOWN_2, NJ_PARSE_BREAKDOWN_1, NJ_PARSE_BREAKDOWN_1)(__VA_ARGS__))
 
+#define NJ_FUNCTION_BREAKDOWN_1(Target, v1, v2) NJ_M_EXPAND(Target)(v1, v2, 0)
+#define NJ_FUNCTION_BREAKDOWN_2(Target, v1, v2, v3, v4) NJ_FUNCTION_BREAKDOWN_1(Target, v1, v2) NJ_M_EXPAND(Target)(v3, v4, 1)
+#define NJ_FUNCTION_BREAKDOWN_3(Target, v1, v2, v3, v4, v5, v6) NJ_FUNCTION_BREAKDOWN_2(Target, v1, v2, v3, v4) NJ_M_EXPAND(Target)(v5, v6, 2)
+#define NJ_FUNCTION_BREAKDOWN_4(Target, v1, v2, v3, v4, v5, v6, v7, v8) NJ_FUNCTION_BREAKDOWN_3(Target, v1, v2, v3, v4, v5, v6) NJ_M_EXPAND(Target)(v7, v8, 3)
+#define NJ_FUNCTION_BREAKDOWN_5(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) NJ_FUNCTION_BREAKDOWN_4(Target, v1, v2, v3, v4, v5, v6, v7, v8) NJ_M_EXPAND(Target)(v9, v10, 4)
+#define NJ_FUNCTION_BREAKDOWN_6(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12) NJ_FUNCTION_BREAKDOWN_5(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) NJ_M_EXPAND(Target)(v11, v12, 5)
+#define NJ_FUNCTION_BREAKDOWN_7(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14) NJ_FUNCTION_BREAKDOWN_6(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12) NJ_M_EXPAND(Target)(v13, v14, 6)
+#define NJ_FUNCTION_BREAKDOWN_8(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16) NJ_FUNCTION_BREAKDOWN_7(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14) NJ_M_EXPAND(Target)(v15, v16, 7)
+#define NJ_FUNCTION_BREAKDOWN_9(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18) NJ_FUNCTION_BREAKDOWN_8(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16) NJ_M_EXPAND(Target)(v17, v18, 8)
+#define NJ_FUNCTION_BREAKDOWN_10(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20) NJ_FUNCTION_BREAKDOWN_9(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18) NJ_M_EXPAND(Target)(v19, v20, 9)
+#define NJ_FUNCTION_BREAKDOWN_11(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22) NJ_FUNCTION_BREAKDOWN_10(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20) NJ_M_EXPAND(Target)(v21, v22, 10)
+#define NJ_FUNCTION_BREAKDOWN_12(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24) NJ_FUNCTION_BREAKDOWN_11(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22) NJ_M_EXPAND(Target)(v23, v24, 11)
+#define NJ_FUNCTION_BREAKDOWN_13(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26) NJ_FUNCTION_BREAKDOWN_12(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24) NJ_M_EXPAND(Target)(v25, v26, 12)
+#define NJ_FUNCTION_BREAKDOWN_14(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28) NJ_FUNCTION_BREAKDOWN_13(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26) NJ_M_EXPAND(Target)(v27, v28, 13)
+#define NJ_FUNCTION_BREAKDOWN_15(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30) NJ_FUNCTION_BREAKDOWN_14(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28) NJ_M_EXPAND(Target)(v29, v30, 14)
+#define NJ_FUNCTION_BREAKDOWN_16(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32) NJ_FUNCTION_BREAKDOWN_15(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30) NJ_M_EXPAND(Target)(v31, v32, 15)
+#define NJ_FUNCTION_BREAKDOWN_17(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34) NJ_FUNCTION_BREAKDOWN_16(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32) NJ_M_EXPAND(Target)(v33, v34, 16)
+#define NJ_FUNCTION_BREAKDOWN_18(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36) NJ_FUNCTION_BREAKDOWN_17(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34) NJ_M_EXPAND(Target)(v35, v36, 17)
+#define NJ_FUNCTION_BREAKDOWN_19(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38) NJ_FUNCTION_BREAKDOWN_18(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36) NJ_M_EXPAND(Target)(v37, v38, 18)
+#define NJ_FUNCTION_BREAKDOWN_20(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40) NJ_FUNCTION_BREAKDOWN_19(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38) NJ_M_EXPAND(Target)(v39, v40, 19)
+#define NJ_FUNCTION_BREAKDOWN_21(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42) NJ_FUNCTION_BREAKDOWN_20(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40) NJ_M_EXPAND(Target)(v41, v42, 20)
+#define NJ_FUNCTION_BREAKDOWN_22(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44) NJ_FUNCTION_BREAKDOWN_21(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42) NJ_M_EXPAND(Target)(v43, v44, 21)
+#define NJ_FUNCTION_BREAKDOWN_23(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46) NJ_FUNCTION_BREAKDOWN_22(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44) NJ_M_EXPAND(Target)(v45, v46, 22)
+#define NJ_FUNCTION_BREAKDOWN_24(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48) NJ_FUNCTION_BREAKDOWN_23(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46) NJ_M_EXPAND(Target)(v47, v48, 23)
+#define NJ_FUNCTION_BREAKDOWN_25(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50) NJ_FUNCTION_BREAKDOWN_24(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48) NJ_M_EXPAND(Target)(v49, v50, 24)
+#define NJ_FUNCTION_BREAKDOWN_26(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52) NJ_FUNCTION_BREAKDOWN_25(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50) NJ_M_EXPAND(Target)(v51, v52, 25)
+#define NJ_FUNCTION_BREAKDOWN_27(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54) NJ_FUNCTION_BREAKDOWN_26(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52) NJ_M_EXPAND(Target)(v53, v54, 26)
+#define NJ_FUNCTION_BREAKDOWN_28(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56) NJ_FUNCTION_BREAKDOWN_27(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54) NJ_M_EXPAND(Target)(v55, v56, 27)
+#define NJ_FUNCTION_BREAKDOWN_29(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58) NJ_FUNCTION_BREAKDOWN_28(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56) NJ_M_EXPAND(Target)(v57, v58, 28)
+#define NJ_FUNCTION_BREAKDOWN_30(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60) NJ_FUNCTION_BREAKDOWN_29(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58) NJ_M_EXPAND(Target)(v59, v60, 29)
+#define NJ_FUNCTION_BREAKDOWN_31(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60, v61, v62) NJ_FUNCTION_BREAKDOWN_30(Target, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60) NJ_M_EXPAND(Target)(v61, v62, 30)
+
+#define NJ_FUNCTION_BREAKDOWN(Target, ...) NJ_M_EXPAND(NJ_GET_M(__VA_ARGS__, NJ_FUNCTION_BREAKDOWN_31, NJ_FUNCTION_BREAKDOWN_31, NJ_FUNCTION_BREAKDOWN_30, NJ_FUNCTION_BREAKDOWN_30, NJ_FUNCTION_BREAKDOWN_29, NJ_FUNCTION_BREAKDOWN_29, NJ_FUNCTION_BREAKDOWN_28, NJ_FUNCTION_BREAKDOWN_28, NJ_FUNCTION_BREAKDOWN_27, NJ_FUNCTION_BREAKDOWN_27, NJ_FUNCTION_BREAKDOWN_26, NJ_FUNCTION_BREAKDOWN_26, NJ_FUNCTION_BREAKDOWN_25, NJ_FUNCTION_BREAKDOWN_25, NJ_FUNCTION_BREAKDOWN_24, NJ_FUNCTION_BREAKDOWN_24, NJ_FUNCTION_BREAKDOWN_23, NJ_FUNCTION_BREAKDOWN_23, NJ_FUNCTION_BREAKDOWN_22, NJ_FUNCTION_BREAKDOWN_22, NJ_FUNCTION_BREAKDOWN_21, NJ_FUNCTION_BREAKDOWN_21, NJ_FUNCTION_BREAKDOWN_20, NJ_FUNCTION_BREAKDOWN_20, NJ_FUNCTION_BREAKDOWN_19, NJ_FUNCTION_BREAKDOWN_19, NJ_FUNCTION_BREAKDOWN_18, NJ_FUNCTION_BREAKDOWN_18, NJ_FUNCTION_BREAKDOWN_17, NJ_FUNCTION_BREAKDOWN_17, NJ_FUNCTION_BREAKDOWN_16, NJ_FUNCTION_BREAKDOWN_16, NJ_FUNCTION_BREAKDOWN_15, NJ_FUNCTION_BREAKDOWN_15, NJ_FUNCTION_BREAKDOWN_14, NJ_FUNCTION_BREAKDOWN_14, NJ_FUNCTION_BREAKDOWN_13, NJ_FUNCTION_BREAKDOWN_13, NJ_FUNCTION_BREAKDOWN_12, NJ_FUNCTION_BREAKDOWN_12, NJ_FUNCTION_BREAKDOWN_11, NJ_FUNCTION_BREAKDOWN_11, NJ_FUNCTION_BREAKDOWN_10, NJ_FUNCTION_BREAKDOWN_10, NJ_FUNCTION_BREAKDOWN_9, NJ_FUNCTION_BREAKDOWN_9, NJ_FUNCTION_BREAKDOWN_8, NJ_FUNCTION_BREAKDOWN_8, NJ_FUNCTION_BREAKDOWN_7, NJ_FUNCTION_BREAKDOWN_7, NJ_FUNCTION_BREAKDOWN_6, NJ_FUNCTION_BREAKDOWN_6, NJ_FUNCTION_BREAKDOWN_5, NJ_FUNCTION_BREAKDOWN_5, NJ_FUNCTION_BREAKDOWN_4, NJ_FUNCTION_BREAKDOWN_4, NJ_FUNCTION_BREAKDOWN_3, NJ_FUNCTION_BREAKDOWN_3, NJ_FUNCTION_BREAKDOWN_2, NJ_FUNCTION_BREAKDOWN_2, NJ_FUNCTION_BREAKDOWN_1, NJ_FUNCTION_BREAKDOWN_1)(Target, __VA_ARGS__))
 
 // ALLOCATION
 #define NJ_CHECK_SERIALIZE(field, stype, ordinal) \
     n_node = (Node) {.key = #field, .type=FIELD, .static_key=true}; \
     VEC_Push_Al(node->children, &n_node, (&(parser->allocator))); \
     json_serialize_ ##stype(&node->children.start[node->children.count-1], (void*)&(buf->field), sizeof(buf->field), parser);
-
-
-#define NJ_SERIALIZE_BREAKDOWN_1(v1, v2) NJ_CHECK_SERIALIZE(v1, v2, 0)
-#define NJ_SERIALIZE_BREAKDOWN_2(v1, v2, v3, v4) NJ_SERIALIZE_BREAKDOWN_1(v1, v2) NJ_CHECK_SERIALIZE(v3, v4, 1)
-#define NJ_SERIALIZE_BREAKDOWN_3(v1, v2, v3, v4, v5, v6) NJ_SERIALIZE_BREAKDOWN_2(v1, v2, v3, v4) NJ_CHECK_SERIALIZE(v5, v6, 2)
-#define NJ_SERIALIZE_BREAKDOWN_4(v1, v2, v3, v4, v5, v6, v7, v8) NJ_SERIALIZE_BREAKDOWN_3(v1, v2, v3, v4, v5, v6) NJ_CHECK_SERIALIZE(v7, v8, 3)
-#define NJ_SERIALIZE_BREAKDOWN_5(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) NJ_SERIALIZE_BREAKDOWN_4(v1, v2, v3, v4, v5, v6, v7, v8) NJ_CHECK_SERIALIZE(v9, v10, 4)
-#define NJ_SERIALIZE_BREAKDOWN_6(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12) NJ_SERIALIZE_BREAKDOWN_5(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) NJ_CHECK_SERIALIZE(v11, v12, 5)
-#define NJ_SERIALIZE_BREAKDOWN_7(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14) NJ_SERIALIZE_BREAKDOWN_6(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12) NJ_CHECK_SERIALIZE(v13, v14, 6)
-#define NJ_SERIALIZE_BREAKDOWN_8(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16) NJ_SERIALIZE_BREAKDOWN_7(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14) NJ_CHECK_SERIALIZE(v15, v16, 7)
-#define NJ_SERIALIZE_BREAKDOWN_9(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18) NJ_SERIALIZE_BREAKDOWN_8(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16) NJ_CHECK_SERIALIZE(v17, v18, 8)
-#define NJ_SERIALIZE_BREAKDOWN_10(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20) NJ_SERIALIZE_BREAKDOWN_9(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18) NJ_CHECK_SERIALIZE(v19, v20, 9)
-#define NJ_SERIALIZE_BREAKDOWN_11(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22) NJ_SERIALIZE_BREAKDOWN_10(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20) NJ_CHECK_SERIALIZE(v21, v22, 10)
-#define NJ_SERIALIZE_BREAKDOWN_12(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24) NJ_SERIALIZE_BREAKDOWN_11(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22) NJ_CHECK_SERIALIZE(v23, v24, 11)
-#define NJ_SERIALIZE_BREAKDOWN_13(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26) NJ_SERIALIZE_BREAKDOWN_12(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24) NJ_CHECK_SERIALIZE(v25, v26, 12)
-#define NJ_SERIALIZE_BREAKDOWN_14(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28) NJ_SERIALIZE_BREAKDOWN_13(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26) NJ_CHECK_SERIALIZE(v27, v28, 13)
-#define NJ_SERIALIZE_BREAKDOWN_15(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30) NJ_SERIALIZE_BREAKDOWN_14(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28) NJ_CHECK_SERIALIZE(v29, v30, 14)
-#define NJ_SERIALIZE_BREAKDOWN_16(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32) NJ_SERIALIZE_BREAKDOWN_15(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30) NJ_CHECK_SERIALIZE(v31, v32, 15)
-#define NJ_SERIALIZE_BREAKDOWN_17(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34) NJ_SERIALIZE_BREAKDOWN_16(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32) NJ_CHECK_SERIALIZE(v33, v34, 16)
-#define NJ_SERIALIZE_BREAKDOWN_18(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36) NJ_SERIALIZE_BREAKDOWN_17(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34) NJ_CHECK_SERIALIZE(v35, v36, 17)
-#define NJ_SERIALIZE_BREAKDOWN_19(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38) NJ_SERIALIZE_BREAKDOWN_18(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36) NJ_CHECK_SERIALIZE(v37, v38, 18)
-#define NJ_SERIALIZE_BREAKDOWN_20(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40) NJ_SERIALIZE_BREAKDOWN_19(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38) NJ_CHECK_SERIALIZE(v39, v40, 19)
-#define NJ_SERIALIZE_BREAKDOWN_21(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42) NJ_SERIALIZE_BREAKDOWN_20(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40) NJ_CHECK_SERIALIZE(v41, v42, 20)
-#define NJ_SERIALIZE_BREAKDOWN_22(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44) NJ_SERIALIZE_BREAKDOWN_21(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42) NJ_CHECK_SERIALIZE(v43, v44, 21)
-#define NJ_SERIALIZE_BREAKDOWN_23(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46) NJ_SERIALIZE_BREAKDOWN_22(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44) NJ_CHECK_SERIALIZE(v45, v46, 22)
-#define NJ_SERIALIZE_BREAKDOWN_24(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48) NJ_SERIALIZE_BREAKDOWN_23(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46) NJ_CHECK_SERIALIZE(v47, v48, 23)
-#define NJ_SERIALIZE_BREAKDOWN_25(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50) NJ_SERIALIZE_BREAKDOWN_24(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48) NJ_CHECK_SERIALIZE(v49, v50, 24)
-#define NJ_SERIALIZE_BREAKDOWN_26(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52) NJ_SERIALIZE_BREAKDOWN_25(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50) NJ_CHECK_SERIALIZE(v51, v52, 25)
-#define NJ_SERIALIZE_BREAKDOWN_27(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54) NJ_SERIALIZE_BREAKDOWN_26(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52) NJ_CHECK_SERIALIZE(v53, v54, 26)
-#define NJ_SERIALIZE_BREAKDOWN_28(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56) NJ_SERIALIZE_BREAKDOWN_27(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54) NJ_CHECK_SERIALIZE(v55, v56, 27)
-#define NJ_SERIALIZE_BREAKDOWN_29(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58) NJ_SERIALIZE_BREAKDOWN_28(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56) NJ_CHECK_SERIALIZE(v57, v58, 28)
-#define NJ_SERIALIZE_BREAKDOWN_30(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60) NJ_SERIALIZE_BREAKDOWN_29(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58) NJ_CHECK_SERIALIZE(v59, v60, 29)
-#define NJ_SERIALIZE_BREAKDOWN_31(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60, v61, v62) NJ_SERIALIZE_BREAKDOWN_30(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29, v30, v31, v32, v33, v34, v35, v36, v37, v38, v39, v40, v41, v42, v43, v44, v45, v46, v47, v48, v49, v50, v51, v52, v53, v54, v55, v56, v57, v58, v59, v60) NJ_CHECK_SERIALIZE(v61, v62, 30)
-
-#define NJ_SERIALIZE_BREAKDOWN(...) NJ_M_EXPAND(NJ_GET_M(__VA_ARGS__, NJ_SERIALIZE_BREAKDOWN_31, NJ_SERIALIZE_BREAKDOWN_31, NJ_SERIALIZE_BREAKDOWN_30, NJ_SERIALIZE_BREAKDOWN_30, NJ_SERIALIZE_BREAKDOWN_29, NJ_SERIALIZE_BREAKDOWN_29, NJ_SERIALIZE_BREAKDOWN_28, NJ_SERIALIZE_BREAKDOWN_28, NJ_SERIALIZE_BREAKDOWN_27, NJ_SERIALIZE_BREAKDOWN_27, NJ_SERIALIZE_BREAKDOWN_26, NJ_SERIALIZE_BREAKDOWN_26, NJ_SERIALIZE_BREAKDOWN_25, NJ_SERIALIZE_BREAKDOWN_25, NJ_SERIALIZE_BREAKDOWN_24, NJ_SERIALIZE_BREAKDOWN_24, NJ_SERIALIZE_BREAKDOWN_23, NJ_SERIALIZE_BREAKDOWN_23, NJ_SERIALIZE_BREAKDOWN_22, NJ_SERIALIZE_BREAKDOWN_22, NJ_SERIALIZE_BREAKDOWN_21, NJ_SERIALIZE_BREAKDOWN_21, NJ_SERIALIZE_BREAKDOWN_20, NJ_SERIALIZE_BREAKDOWN_20, NJ_SERIALIZE_BREAKDOWN_19, NJ_SERIALIZE_BREAKDOWN_19, NJ_SERIALIZE_BREAKDOWN_18, NJ_SERIALIZE_BREAKDOWN_18, NJ_SERIALIZE_BREAKDOWN_17, NJ_SERIALIZE_BREAKDOWN_17, NJ_SERIALIZE_BREAKDOWN_16, NJ_SERIALIZE_BREAKDOWN_16, NJ_SERIALIZE_BREAKDOWN_15, NJ_SERIALIZE_BREAKDOWN_15, NJ_SERIALIZE_BREAKDOWN_14, NJ_SERIALIZE_BREAKDOWN_14, NJ_SERIALIZE_BREAKDOWN_13, NJ_SERIALIZE_BREAKDOWN_13, NJ_SERIALIZE_BREAKDOWN_12, NJ_SERIALIZE_BREAKDOWN_12, NJ_SERIALIZE_BREAKDOWN_11, NJ_SERIALIZE_BREAKDOWN_11, NJ_SERIALIZE_BREAKDOWN_10, NJ_SERIALIZE_BREAKDOWN_10, NJ_SERIALIZE_BREAKDOWN_9, NJ_SERIALIZE_BREAKDOWN_9, NJ_SERIALIZE_BREAKDOWN_8, NJ_SERIALIZE_BREAKDOWN_8, NJ_SERIALIZE_BREAKDOWN_7, NJ_SERIALIZE_BREAKDOWN_7, NJ_SERIALIZE_BREAKDOWN_6, NJ_SERIALIZE_BREAKDOWN_6, NJ_SERIALIZE_BREAKDOWN_5, NJ_SERIALIZE_BREAKDOWN_5, NJ_SERIALIZE_BREAKDOWN_4, NJ_SERIALIZE_BREAKDOWN_4, NJ_SERIALIZE_BREAKDOWN_3, NJ_SERIALIZE_BREAKDOWN_3, NJ_SERIALIZE_BREAKDOWN_2, NJ_SERIALIZE_BREAKDOWN_2, NJ_SERIALIZE_BREAKDOWN_1, NJ_SERIALIZE_BREAKDOWN_1)(__VA_ARGS__))
 
 #define NJ_DECLARE_PARSE(Type) void json_parse_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser); void json_parse_nj_array_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser); void json_parse_nj_ptr_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser);
 #define NJ_DECLARE_VECTOR_PARSE(Type) void json_parse_nj_vector_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser);
@@ -186,7 +151,7 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
         bool field_marked[256] = {0};\
         Type* out = (Type*)out_raw; \
         for(size_t i = 0; i < node->children.count; i++){ \
-            NJ_PARSE_BREAKDOWN(__VA_ARGS__) \
+            NJ_FUNCTION_BREAKDOWN(NJ_CHECK_PARSE, __VA_ARGS__) \
         } \
     } \
     void json_parse_nj_array_ ##Type(Node* node, void* out_raw, size_t elem_s, JsonParser* parser) { \
@@ -251,7 +216,7 @@ void json_serialize__Bool(Node* node, void* buf, size_t elem_s, JsonParser* pars
         } \
         Type* buf = (Type*)buf_raw; \
         Node n_node; \
-        NJ_SERIALIZE_BREAKDOWN(__VA_ARGS__) \
+        NJ_FUNCTION_BREAKDOWN(NJ_CHECK_SERIALIZE, __VA_ARGS__) \
     } \
     void json_serialize_nj_array_ ##Type(Node* node, void* buf_raw, size_t elem_s, JsonParser* parser) { \
         if(node->type == FIELD){ \
@@ -389,6 +354,32 @@ void json_serialize_nj_enum_##Type(Node* node, void* buf_raw, size_t elem_s, Jso
     \
 } \
 
+#define NJ_STRUCT_SINGLE_FIELD(field, stype, ordinal) \
+    stype field;
+
+#define NJ_STRUCT_AS_VEC(Type) typedef A_VEC(Type) NJ_VEC(Type);
+
+#define NJ_STRUCT_DECLARE(Type, ...) typedef struct { \
+        NJ_FUNCTION_BREAKDOWN(NJ_STRUCT_SINGLE_FIELD, __VA_ARGS__)\
+    } Type; \
+    NJ_DECLARE_PARSE_SERIALIZE(Type);
+
+#define NJ_STRUCT_DEFINE(Type, ...) typedef struct { \
+        NJ_FUNCTION_BREAKDOWN(NJ_STRUCT_SINGLE_FIELD, __VA_ARGS__)\
+    } Type; \
+    NJ_DEFINE_PARSE_SERIALIZE(Type, __VA_ARGS__);
+
+#ifdef NJ_STRUCT_IMPLEMENTATION
+    #define NJ_STRUCT(Type, ...) NJ_STRUCT_DEFINE(Type, __VA_ARGS__)
+#else 
+    #define NJ_STRUCT(Type, ...) NJ_STRUCT_DECLARE(Type, __VA_ARGS__)
+#endif
+
+#ifdef NJ_STRUCT_IMPLEMENTATION
+    #define NJ_STRUCT_WITH_VEC(Type, ...) NJ_STRUCT(Type, __VA_ARGS__) NJ_STRUCT_AS_VEC(Type) NJ_DEFINE_VECTOR_PARSE_SERIALIZE(Type)
+#else
+    #define NJ_STRUCT_WITH_VEC(Type, ...) NJ_STRUCT(Type, __VA_ARGS__) NJ_STRUCT_AS_VEC(Type) NJ_DECLARE_VECTOR_PARSE_SERIALIZE(Type)
+#endif
 
 #define NJ_PARSE_NODE(Type, node, out, parser) json_parse_##Type(node, (void*)out, sizeof(Type), parser)
 #define NJ_PARSE_NODE_VECTOR(Type, node, out, parser) json_parse_nj_vector_##Type(node, (void*)out, sizeof(Type), parser)
@@ -416,45 +407,45 @@ void json_serialize_nj_enum_##Type(Node* node, void* buf_raw, size_t elem_s, Jso
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(uint64_t);
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(time_t);
 
-    #define json_serialize_int json_serialize_integral;
-    #define json_serialize_short json_serialize_integral;
-    #define json_serialize_long json_serialize_integral;
+    #define json_serialize_int json_serialize_integral
+    #define json_serialize_short json_serialize_integral
+    #define json_serialize_long json_serialize_integral
 
-    #define json_serialize_int8_t json_serialize_integral;
-    #define json_serialize_int16_t json_serialize_integral;
-    #define json_serialize_int32_t json_serialize_integral;
-    #define json_serialize_int64_t json_serialize_integral;
+    #define json_serialize_int8_t json_serialize_integral
+    #define json_serialize_int16_t json_serialize_integral
+    #define json_serialize_int32_t json_serialize_integral
+    #define json_serialize_int64_t json_serialize_integral
 
-    #define json_serialize_uint8_t json_serialize_integral;
-    #define json_serialize_uint16_t json_serialize_integral;
-    #define json_serialize_uint32_t json_serialize_integral;
-    #define json_serialize_uint64_t json_serialize_integral;
-    #define json_serialize_time_t json_serialize_integral;
+    #define json_serialize_uint8_t json_serialize_integral
+    #define json_serialize_uint16_t json_serialize_integral
+    #define json_serialize_uint32_t json_serialize_integral
+    #define json_serialize_uint64_t json_serialize_integral
+    #define json_serialize_time_t json_serialize_integral
 
-    #define json_serialize_float json_serialize_floating;
-    #define json_serialize_double json_serialize_floating;
+    #define json_serialize_float json_serialize_floating
+    #define json_serialize_double json_serialize_floating
 
-    #define json_serialize_int json_serialize_integral;
-    #define json_serialize_short json_serialize_integral;
-    #define json_serialize_long json_serialize_integral;
+    #define json_serialize_int json_serialize_integral
+    #define json_serialize_short json_serialize_integral
+    #define json_serialize_long json_serialize_integral
 
-    #define json_parse_int json_parse_integral;
-    #define json_parse_short json_parse_integral;
-    #define json_parse_long json_parse_integral;
+    #define json_parse_int json_parse_integral
+    #define json_parse_short json_parse_integral
+    #define json_parse_long json_parse_integral
 
-    #define json_parse_int8_t json_parse_integral;
-    #define json_parse_int16_t json_parse_integral;
-    #define json_parse_int32_t json_parse_integral;
-    #define json_parse_int64_t json_parse_integral;
+    #define json_parse_int8_t json_parse_integral
+    #define json_parse_int16_t json_parse_integral
+    #define json_parse_int32_t json_parse_integral
+    #define json_parse_int64_t json_parse_integral
 
-    #define json_parse_uint8_t json_parse_integral;
-    #define json_parse_uint16_t json_parse_integral;
-    #define json_parse_uint32_t json_parse_integral;
-    #define json_parse_uint64_t json_parse_integral;
-    #define json_parse_time_t json_parse_integral;
+    #define json_parse_uint8_t json_parse_integral
+    #define json_parse_uint16_t json_parse_integral
+    #define json_parse_uint32_t json_parse_integral
+    #define json_parse_uint64_t json_parse_integral
+    #define json_parse_time_t json_parse_integral
 
-    #define json_parse_float json_parse_floating;
-    #define json_parse_double json_parse_floating;
+    #define json_parse_float json_parse_floating
+    #define json_parse_double json_parse_floating
 
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(float);
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(double);
