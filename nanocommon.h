@@ -189,8 +189,10 @@ void replace_in_str(char* dest, const char* src, const char* from, const char* t
             in_from = 0;
         }
         if(in_from == from_l){
-            in_dest += strcpy_tn(dest + in_dest, i-from_l-last_copy_position, src + last_copy_position);
-            in_dest += strcpy_tn(dest + in_dest, to_l, to);
+            strncpy(dest + in_dest, src + last_copy_position, i-from_l-last_copy_position);
+            in_dest += i-from_l-last_copy_position + 1;
+            strncpy(dest + in_dest, to, to_l);
+            in_dest += to_l;
             
             last_copy_position = i + 1;
             remaining--;
@@ -198,7 +200,7 @@ void replace_in_str(char* dest, const char* src, const char* from, const char* t
     }
     size_t src_l = strnlen(src, max_buffer_len);
     if(last_copy_position < src_l){
-        strcpy_tn(dest + in_dest, src_l - last_copy_position + 1, src + last_copy_position);
+        strncpy(dest + in_dest, src + last_copy_position, src_l - last_copy_position + 1);
     } else {
         dest[in_dest] = '\0';
     }

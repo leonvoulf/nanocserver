@@ -668,8 +668,11 @@ void ns_call_all_middle_route_handlers(Server* server, const HTTPRequest* req, H
 ClientResult ns_handle_client(Server* server, SOCKET client_socket){ // socket is ready for rw
     HTTPRequest req = {0};
     HTTPResponse res = {.client_socket=client_socket, .body_dealloc=free};
-    char rbuff[MAX_READ];
-    int r = recv(client_socket, rbuff, MAX_READ-1, 0);
+    ClientResult c_r = NS_CLIENT_SUCCESSFUL;
+    
+    char initial_read_buffer[MAX_READ+1];
+    char* rbuff = initial_read_buffer;
+    int r = recv(client_socket, rbuff, MAX_READ, 0);
     if(r < 0){
         bool e = handle_socket_error();
         return e ? NS_CLIENT_RESULT_ERROR : NS_CLIENT_WOULD_BLOCK;
@@ -679,14 +682,33 @@ ClientResult ns_handle_client(Server* server, SOCKET client_socket){ // socket i
         return NS_CLIENT_EMPTY;
     }
     else if(r > 0){
-        if(!ns_breakdown_request(&req, client_socket, rbuff, (size_t)r))
-            return NS_CLIENT_RESULT_ERROR;
+        size_t cur_read = MAX_READ;
+        if(r >= cur_read){
+            rbuff = NC_ALLOCATE(cur_read*2+1);
+            strncpy(rbuff, initial_read_buffer, MAX_READ);
+            r = recv(client_socket, rbuff + r, cur_read, 0);
+            while(r >= cur_read){
+                cur_read *= 2;
+                rbuff = NC_REALLOCATE(rbuff, cur_read*2+1);
+                r = recv(client_socket, rbuff+cur_read, cur_read, 0);
+            }
+            cur_read += r;
+        } else {
+            cur_read = r;
+        }
+        rbuff[cur_read] = '\0';
+
+        if(!ns_breakdown_request(&req, client_socket, rbuff, (size_t)cur_read)){
+            c_r = NS_CLIENT_RESULT_ERROR;
+            goto post_request_process;
+        }
 
         ns_call_all_middle_route_handlers(server, &req, &res);
         RouteHandler* handle = ns_match_handler(server, &req);
         if(handle == NULL){
             LOG_DEBUG("Received HTTP request without appropriate handler on socket %d", (int)client_socket);
-            return NS_CLIENT_RESULT_ERROR;
+            c_r = NS_CLIENT_RESULT_ERROR;
+            goto post_request_process;
         }
         handle->handler(&req, &res, handle->param);
         if(!res.borrowed){ // if it was borrowed - then the caller has to send it
@@ -694,7 +716,11 @@ ClientResult ns_handle_client(Server* server, SOCKET client_socket){ // socket i
             ns_free_request_response(&req, &res);
         }
     }
-    return NS_CLIENT_SUCCESSFUL;
+
+    post_request_process:
+    if(rbuff != initial_read_buffer)
+        NC_FREE(rbuff);
+    return c_r;
 }
 
 void ns_put_header(HTTPResponse* res, const char* key, const char* value){
