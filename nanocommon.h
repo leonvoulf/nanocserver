@@ -189,8 +189,10 @@ void replace_in_str(char* dest, const char* src, const char* from, const char* t
             in_from = 0;
         }
         if(in_from == from_l){
-            strncpy(dest + in_dest, src + last_copy_position, i-from_l-last_copy_position);
-            in_dest += i-from_l-last_copy_position + 1;
+            if(i > from_l+last_copy_position){
+                strncpy(dest + in_dest, src + last_copy_position, i-from_l-last_copy_position);
+                in_dest += i-from_l-last_copy_position + 1;
+            }
             strncpy(dest + in_dest, to, to_l);
             in_dest += to_l;
             
