@@ -169,6 +169,7 @@ void ns_send_response(HTTPResponse* res);
 HTTPResponse* ns_borrow_response(HTTPResponse* res); // gives up memory control of the response to the caller
 void ns_set_response_body(HTTPResponse* res, const char* body, const char* content_type);
 void ns_set_response_body_status(HTTPResponse* res, const char* body, const char* content_type, int status);
+void ns_set_response_static_body_status(HTTPResponse* res, const char* body, const char* content_type, int status);
 void ns_free_request_response(HTTPRequest* req, HTTPResponse* res);
 RouteHandler* ns_match_handler(Server* server, const HTTPRequest* req);
 ClientResult ns_handle_client(Server* server, SOCKET client_socket); // socket is ready for rw
@@ -606,6 +607,11 @@ void ns_set_response_body(HTTPResponse* res, const char* body, const char* conte
 void ns_set_response_body_status(HTTPResponse* res, const char* body, const char* content_type, int status){
     ns_set_response_body(res, body, content_type);
     res->status_code = status;
+}
+
+void ns_set_response_static_body_status(HTTPResponse* res, const char* body, const char* content_type, int status){
+    ns_set_response_body_status(res, body, content_type, status);
+    res->body_dealloc = NULL;
 }
 
 void ns_free_request_response(HTTPRequest* req, HTTPResponse* res){
