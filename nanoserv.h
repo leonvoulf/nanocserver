@@ -108,7 +108,7 @@ typedef struct HTTPRequest {
     const char* body;
 } HTTPRequest;
 
-typedef void(*body_dealloc_t)(void*);
+typedef void(*body_dealloc_t)(void*, void*);
 
 typedef struct HTTPResponse {
     int client_socket;
@@ -119,6 +119,7 @@ typedef struct HTTPResponse {
     size_t body_length;
     bool borrowed;
     body_dealloc_t body_dealloc;
+    void* body_dealloc_context;
 
 } HTTPResponse;
 
@@ -626,7 +627,7 @@ void ns_free_request_response(HTTPRequest* req, HTTPResponse* res){
     }
     if(res != NULL){
         if(res->body != NULL && res->body_dealloc != NULL)
-            res->body_dealloc((void*)res->body);
+            res->body_dealloc(res->body_dealloc_context, (void*)res->body);
         
         for(size_t i = 0; i < res->headers.count; i++){
             ns_free_header(&res->headers.start[i]);
@@ -670,10 +671,13 @@ void ns_call_all_middle_route_handlers(Server* server, const HTTPRequest* req, H
     }
 }
 
+static void dealloc_wrapper(void* context, void* ptr){
+    free(ptr);
+}
 
 ClientResult ns_handle_client(Server* server, SOCKET client_socket){ // socket is ready for rw
     HTTPRequest req = {0};
-    HTTPResponse res = {.client_socket=client_socket, .body_dealloc=free};
+    HTTPResponse res = {.client_socket=client_socket, .body_dealloc=dealloc_wrapper};
     ClientResult c_r = NS_CLIENT_SUCCESSFUL;
     
     char initial_read_buffer[MAX_READ+1];

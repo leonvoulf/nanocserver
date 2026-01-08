@@ -60,9 +60,6 @@ wchar_t** iterate_dir_files(const wchar_t* path){
 }
 
 int check_json(int argc, char** argv){
-    // Server* serv = ns_create_server(NULL, 3000);
-    // ns_request(serv, GET, "/a", gen_handle);
-    // ns_start_server(serv);
 
     const wchar_t** filenames = iterate_dir_files(CHECK_FOLDER"*");
     wchar_t filename[MAX_PATH] = CHECK_FOLDER; 
@@ -81,7 +78,7 @@ int check_json(int argc, char** argv){
         buffer[r] = '\0';
 
         int errc = -1;
-        Node* parent = create_nodes_from_parent(buffer, strlen(buffer), &errc, &parser);
+        JsonNode* parent = json_from_buffer(buffer, strlen(buffer), &errc, &parser);
         if(parent == NULL) {
             wprintf(L"Failed to parse %s, errc: %d\n", partial_filename, errc);
         } else {
