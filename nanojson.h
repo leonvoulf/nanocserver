@@ -918,7 +918,11 @@ void json_parse_integral(JsonNode* node, void* out, size_t elem_s, JsonParser* p
         json_parse_integral(&node->children.start[0], out, elem_s, parser);
         return;
     }
-    assert(node->flags == NUMERICAL && "Non numerical expressions cannot be parsed as numerical types");
+    assert((node->flags == NUMERICAL || node->flags == NULL_VALUE) && "Non numerical expressions cannot be parsed as numerical types");
+    if(node->flags == NULL_VALUE){
+        memset(out, 0, elem_s);
+        return;
+    }
     if(elem_s == sizeof(int8_t)){
         *(int8_t*)out = (int8_t)(atoi(node->key) & 0xFF);
     }
@@ -938,7 +942,11 @@ void json_parse_floating(JsonNode* node, void* out, size_t elem_s, JsonParser* p
         json_parse_floating(&node->children.start[0], out, elem_s, parser);
         return;
     }
-    assert(node->flags == NUMERICAL && "Non numerical expressions cannot be parsed as numerical types");
+    assert((node->flags == NUMERICAL || node->flags == NULL_VALUE) && "Non numerical expressions cannot be parsed as numerical types");
+    if(node->flags == NULL_VALUE){
+        memset(out, 0, elem_s);
+        return;
+    }
     if(elem_s == sizeof(float)){
         *(float*)out = (float)(strtod(node->key, NULL));
     }
@@ -952,7 +960,11 @@ void json_parse_string(JsonNode* node, void* out, size_t elem_s, JsonParser* par
         json_parse_string(&node->children.start[0], out, elem_s, parser);
         return;
     }
-    assert(node->flags == STRING && "Non strings cannot be parsed as string values");
+    assert((node->flags == STRING || node->flags == NULL_VALUE) && "Non strings cannot be parsed as string values");
+    if(node->flags == NULL_VALUE){
+        memset(out, 0, sizeof(char*));
+        return;
+    }
     size_t l = strlen(node->key)+1;
     if(*(char**)out == NULL){
         *(char**)out = parser->allocator.alloc(parser->allocator.context, l);
