@@ -89,6 +89,21 @@ void n_system_allocator_init(system_allocator* allocator);
 #include <assert.h>
 #include <string.h>
 
+#if (defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200809L) || defined(_GNU_SOURCE)
+    #define HAS_STRNLEN 1
+#elif defined(_MSC_VER)
+    #if _MSC_VER >= 1400
+        #define HAS_STRNLEN 1
+    #endif
+#endif
+
+#ifndef HAS_STRNLEN
+    size_t strnlen(const char *s, size_t n) {
+        const char *p = (const char *)memchr(s, 0, n);
+        return p ? (size_t)(p - s) : n;
+    }
+#endif
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>

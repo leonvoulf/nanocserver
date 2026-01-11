@@ -5,6 +5,7 @@
 #include <malloc.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <time.h>
 #include "nanocommon.h"
 
 #define MAX_EXPRESSION_LENGTH 2048

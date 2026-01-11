@@ -200,14 +200,6 @@ void close_socket(SOCKET socket){
     #endif
 }
 
-void sleep_msec(int msec){
-    #ifdef _WIN32
-        Sleep(msec);
-    #else
-        usleep(msec*1000);
-    #endif
-}
-
 bool handle_socket_error(){
     int err = -1;
     #ifdef _WIN32
@@ -453,9 +445,7 @@ void ns_listen_incoming(Server* server){
         }
         VEC_Push(server->alive_sockets, &new_sock);
         // assert(server->alive_sockets.count < MAX_FD_SET); // CHANGE: splitting FDSETS by threads - currently busy waiting
-    } else if (retval == 0){
-//        sleep_msec(5); // 16msec or so on Win32 (without changing tick duration)
-    } else {
+    } else if(retval < 0) {
         handle_socket_error();
     }
 }

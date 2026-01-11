@@ -9,11 +9,11 @@
 
 typedef char* string; // unfortunately required
 NJ_STRUCT_WITH_VEC(A, a, int, b, string, c, float);
-// An alternative definition would be
+// An alternative definition that works with more complex types would be:
 // struct A { int a; char* b; float c;};
 // NJ_DEFINE_PARSE_SERIALIZE(A, a, int, b, string, c, float);
 // NJ_DEFINE_PARSE_SERIALIZE_VECTOR(A);
-// And in an header file you'd use NJ_DECLARE_PARSE_SERIALIZE(A)
+// And in an header file you'd use NJ_DECLARE_PARSE_SERIALIZE(A) instead
 NJ_STRUCT(B, as, NJ_VEC(A), e, int);
 
 void post_a(const HTTPRequest* req, HTTPResponse* res, route_handler_param param){
