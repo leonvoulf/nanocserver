@@ -44,9 +44,6 @@ typedef int SOCKET;
 #define MAX_FD_SET 64
 #define MAX_SOCKETS 
 #define MAX_READ 8192
-#ifndef NS_THREAD_POOL_SIZE
-#define NS_THREAD_POOL_SIZE 10
-#endif
 
 #ifdef NS_DEBUG
 #define LOG_DEBUG(x, ...) printf(x, __VA_ARGS__)
@@ -183,6 +180,10 @@ void close_socket(SOCKET socket);
 #ifdef NS_IMPLEMENTATION
 #ifndef NS_IMPLEMENTATION_GUARD
 #define NS_IMPLEMENTATION_GUARD
+
+#ifndef NS_THREAD_POOL_SIZE
+#define NS_THREAD_POOL_SIZE 10
+#endif
 
 void socket_startup(){
     #ifdef _WIN32

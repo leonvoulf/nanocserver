@@ -123,7 +123,7 @@ bool compare_and_swap_64(volatile uint64_t* target, uint64_t comparand, uint64_t
     return false;
 }
 
-bool compare_and_swap_ptr(volatile void** target, void* comparand, void* value){
+bool compare_and_swap_ptr(volatile void** target, volatile void* comparand, void* value){
 
     #ifdef _WIN32
         _ReadWriteBarrier();
