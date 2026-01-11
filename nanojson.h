@@ -722,8 +722,8 @@ JsonNode* json_from_buffer(const char* buffer, size_t buffer_len, int* error_cod
 
             else{
                 expression[expr_len++] = c;
-                if(c == '\\')
-                    expression[expr_len++] = c;  
+                // if(c == '\\')
+                //     expression[expr_len++] = c;  
             }
         }
             
