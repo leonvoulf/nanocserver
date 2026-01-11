@@ -359,7 +359,7 @@ void json_serialize_nj_enum_##Type(JsonNode* node, void* buf_raw, size_t elem_s,
 #define NJ_STRUCT_SINGLE_FIELD(field, stype, ordinal) \
     stype field;
 
-#define NJ_STRUCT_AS_VEC(Type) typedef A_VEC(Type) NJ_M_EXPAND(NJ_VEC(Type));
+#define NJ_DECALRE_VEC(Type) typedef A_VEC(Type) NJ_M_EXPAND(NJ_VEC(Type));
 
 #define NJ_STRUCT_DECLARE(Type, ...) typedef struct { \
         NJ_FUNCTION_BREAKDOWN(NJ_STRUCT_SINGLE_FIELD, __VA_ARGS__)\
@@ -378,9 +378,9 @@ void json_serialize_nj_enum_##Type(JsonNode* node, void* buf_raw, size_t elem_s,
 #endif
 
 #ifdef NJ_STRUCT_IMPLEMENTATION
-    #define NJ_STRUCT_WITH_VEC(Type, ...) NJ_STRUCT(Type, __VA_ARGS__) NJ_STRUCT_AS_VEC(Type); NJ_DEFINE_VECTOR_PARSE_SERIALIZE(Type)
+    #define NJ_STRUCT_WITH_VEC(Type, ...) NJ_STRUCT(Type, __VA_ARGS__) NJ_DECALRE_VEC(Type); NJ_DEFINE_VECTOR_PARSE_SERIALIZE(Type)
 #else
-    #define NJ_STRUCT_WITH_VEC(Type, ...) NJ_STRUCT(Type, __VA_ARGS__) NJ_STRUCT_AS_VEC(Type); NJ_DECLARE_VECTOR_PARSE_SERIALIZE(Type)
+    #define NJ_STRUCT_WITH_VEC(Type, ...) NJ_STRUCT(Type, __VA_ARGS__) NJ_DECALRE_VEC(Type); NJ_DECLARE_VECTOR_PARSE_SERIALIZE(Type)
 #endif
 
 #define NJ_PARSE_NODE(Type, node, out, parser) json_parse_##Type(node, (void*)out, sizeof(Type), parser)

@@ -14,6 +14,9 @@ NJ_STRUCT_WITH_VEC(A, a, int, b, string, c, float);
 // NJ_DEFINE_PARSE_SERIALIZE(A, a, int, b, string, c, float);
 // NJ_DEFINE_PARSE_SERIALIZE_VECTOR(A);
 // And in an header file you'd use NJ_DECLARE_PARSE_SERIALIZE(A) instead
+
+// If you need to have a VECTOR of primitive types (i.e. int), use NJ_DECLARE_VEC(int) before defining the struct
+
 NJ_STRUCT(B, as, NJ_VEC(A), e, int);
 
 void post_a(const HTTPRequest* req, HTTPResponse* res, route_handler_param param){
