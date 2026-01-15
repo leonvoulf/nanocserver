@@ -9,3 +9,4 @@ Json: maybe using hashmaps will be faster for larger objects, benchmark it in th
 Server: maybe usage of an arena allocator would be quicker - but it would require initialization of many arena allocators, maybe only create "small" arenas for predictable things like header sizes
 
 Server: SSL is currently not supported (add libssl support)
+Server: maybe add a basic http client

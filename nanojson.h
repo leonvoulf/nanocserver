@@ -372,6 +372,12 @@ void json_serialize_nj_enum_##Type(JsonNode* node, void* buf_raw, size_t elem_s,
     NJ_DEFINE_PARSE_SERIALIZE(Type, __VA_ARGS__);
 
 #ifdef NJ_STRUCT_IMPLEMENTATION
+    #define NJ_ENUM_PARSE_SERIALIZE(Type, strings) NJ_DEFINE_PARSE_SERIALIZE_ENUM(Type, strings); typedef Type NJ_M_EXPAND(NJ_ENUM(Type));
+#else 
+    #define NJ_ENUM_PARSE_SERIALIZE(Type, strings) NJ_DECLARE_PARSE_SERIALIZE_ENUM(Type); typedef Type NJ_M_EXPAND(NJ_ENUM(Type));
+#endif
+
+#ifdef NJ_STRUCT_IMPLEMENTATION
     #define NJ_STRUCT(Type, ...) NJ_STRUCT_DEFINE(Type, __VA_ARGS__)
 #else 
     #define NJ_STRUCT(Type, ...) NJ_STRUCT_DECLARE(Type, __VA_ARGS__)
