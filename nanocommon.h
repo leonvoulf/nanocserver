@@ -83,6 +83,9 @@ bool n_arena_allocator_free(void* allocator, void* start);
 
 void n_system_allocator_init(system_allocator* allocator);
 
+void atomic_store_64(volatile uint64_t* target, uint64_t value);
+uint64_t atomic_load_64(volatile uint64_t* target);
+
 #ifdef NC_IMPLEMENTATION
 #ifndef NC_IMPLEMENTATION_GUARD
 #define NC_IMPLEMENTATION_GUARD
@@ -113,19 +116,27 @@ void atomic_store_64(volatile uint64_t* target, uint64_t value){
     #ifdef _WIN32
         _ReadWriteBarrier();
         InterlockedExchange64(target, value);
+        _ReadWriteBarrier();
     #elif defined(__GNUC__)
         __sync_synchronize();
-        *target = value;
+        __atomic_store_n(target, value, __ATOMIC_SEQ_CST);
+        __sync_synchronize();
     #endif
 }
 
 uint64_t atomic_load_64(volatile uint64_t* target){
     #ifdef _WIN32
         _ReadWriteBarrier();
+        uint64_t val = _InterlockedOr64(target, 0);
+        _ReadWriteBarrier();
+        return val;
     #elif defined(__GNUC__)
         __sync_synchronize();
+        uint64_t val = __atomic_load_n(target, __ATOMIC_SEQ_CST);
+        __sync_synchronize();
+        return val;        
     #endif
-    return *target;
+    
 } 
 
 bool compare_and_swap_64(volatile uint64_t* target, uint64_t comparand, uint64_t value){

@@ -139,7 +139,7 @@ typedef struct Server {
     A_VEC(SOCKET) alive_sockets;
     uint64_t last_communication_time;
     A_VEC(RouteHandler) handlers;
-    bool shutdown_pending;
+    volatile uint64_t shutdown_pending;
 
     A_VEC(SOCKET) handler_params_queue;
     A_VEC(SOCKET) sockets_to_remove;
@@ -184,6 +184,8 @@ void close_socket(SOCKET socket);
 #ifndef NS_THREAD_POOL_SIZE
 #define NS_THREAD_POOL_SIZE 10
 #endif
+
+#define NS_THREAD_WAIT_TIME 5
 
 void socket_startup(){
     #ifdef _WIN32
@@ -310,7 +312,7 @@ Server* ns_create_server(const char* server_address, int port, bool server_socke
 }
 
 void ns_stop_server(Server* server){
-    server->shutdown_pending = true;
+    atomic_store_64(&server->shutdown_pending, 1);
 }
 
 void ns_destroy_server(Server* server){
@@ -838,7 +840,7 @@ int ns_run_thread_pool(void* server_arg){
         return 1;
     
     while(true){
-        struct timespec tms = (struct timespec){.tv_sec=time(NULL)+30};
+        struct timespec tms = (struct timespec){.tv_sec=time(NULL)+NS_THREAD_WAIT_TIME};
         mtx_lock(&server->handler_params_m);
         if(server->handler_params_queue.count > 0){
             SOCKET client_socket = server->handler_params_queue.start[server->handler_params_queue.count-1];
@@ -859,10 +861,11 @@ int ns_run_thread_pool(void* server_arg){
         mtx_unlock(&server->handler_params_m);
         mtx_lock(&server->server_handler_m);
         cnd_timedwait(&server->server_cv, &server->server_handler_m, &tms);
-        if(server->shutdown_pending){
+        if(atomic_load_64(&server->shutdown_pending)){
             mtx_unlock(&server->server_handler_m);
             return 0;
         }
+
         mtx_unlock(&server->server_handler_m);
     }
     return 1;
@@ -968,11 +971,13 @@ void ns_start_server(Server* server) {
         for(size_t i = 0; i < NS_THREAD_POOL_SIZE; i++){
             thrd_create(&threads[i], ns_run_thread_pool, server);
         }
-    while(!server->shutdown_pending){
+    while(!atomic_load_64(&server->shutdown_pending)){
         ns_listen_incoming(server);
         ns_check_clients(server);
     }
+    mtx_lock(&server->server_handler_m);
     cnd_broadcast(&server->server_cv);
+    mtx_unlock(&server->server_handler_m);
     if(NS_THREAD_POOL_SIZE > 1)
         for(size_t i = 0; i < NS_THREAD_POOL_SIZE; i++){
             int j_res;

@@ -455,6 +455,9 @@ void json_serialize_nj_enum_##Type(JsonNode* node, void* buf_raw, size_t elem_s,
     #define json_parse_float json_parse_floating
     #define json_parse_double json_parse_floating
 
+    #define json_parse_nj_array_char json_parse_chars
+    #define json_serialize_nj_array_char json_serialize_chars
+
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(float);
     NJ_DECLARE_VECTOR_PARSE_SERIALIZE(double);
 

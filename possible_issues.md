@@ -10,3 +10,5 @@ Server: maybe usage of an arena allocator would be quicker - but it would requir
 
 Server: SSL is currently not supported (add libssl support)
 Server: maybe add a basic http client
+
+Common: added "full sequential atomic store/load", may impact arena performance - must benchmark
