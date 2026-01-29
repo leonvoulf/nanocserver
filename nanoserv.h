@@ -66,11 +66,11 @@ static const char* status_names[] = {"Service Unavailable", "", "Unavailable For
              "Reset Content", "Precondition Required", "", "", "Switching protocols", "", "", "", "", "", "", "Internal Server Error", "", "",
              "", "Range Not Satisfiable", "Temporary Redirect", "", "Unauthorized", "", "Non-Authoritative Information", "Upgrade Required",
              "HTTP Version Not Supported", "", "", "Not Extended", "Misdirected Request", "", "", "Not Acceptable", "", "", "Length Required", "Found",
-                "OK", "Already Reported", "Request Header Fields Too Large"};
+                "OK", "Already Reported", "Request Header Fields Too Large", "", "", "", "", "", "", "Unknown"};
 
 static const char* content_types[] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "application/javascript", "", "", "", "", "application/zip", "", "", "text/plain", "", "", "", "", "", "", "text/css", "", "", "", "application/vnd.rar", "text/csv", "", "", "application/xml", "image/svg+xml", "application/x-tar", "audio/wav", "", "", "", "", "image/jpeg", "", "", "font/ttf", "image/png", "", "image/x-icon", "application/octet-stream", "application/octet-stream", "application/vnd.ms-fontobject", "application/json", "", "application/wasm", "", "", "application/pdf", "", "", "", "image/gif", "application/ogg", "application/x-7z-compressed", "", "text/html", "", "", "", "", "", "", "image/jpeg", "", "", "video/webm", "font/woff", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "audio/mpeg", "", "", "", "", "", "", "video/mp4", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
 
-static const char* possible_methods[] = {"GET", "POST", "UPDATE", "PATCH", "DELETE", "PUT"};
+static const char* possible_methods[] = {"GET", "POST", "UPDATE", "PATCH", "DELETE", "PUT", "OPTIONS"};
 
 //SUPPORT FOR HTTP STATUS CODE NAMES
 
@@ -177,6 +177,8 @@ void ns_start_server(Server* server);
 void socket_startup();
 void close_socket(SOCKET socket);
 
+int ns_set_socket_blocking_mode(SOCKET socket, bool blocking);
+
 #ifdef NS_IMPLEMENTATION
 #ifndef NS_IMPLEMENTATION_GUARD
 #define NS_IMPLEMENTATION_GUARD
@@ -221,13 +223,17 @@ bool handle_socket_error(){
     #endif
 }
 
-int set_non_blocking(SOCKET socket){
+int ns_set_socket_blocking_mode(SOCKET socket, bool blocking){
     #ifdef _WIN32
-        u_long mode = 1; // 1 for non-blocking, 0 for blocking
+        u_long mode = blocking ? 0 : 1; // 1 for non-blocking, 0 for blocking
         return ioctlsocket(socket, FIONBIO, &mode);
     #else
         int flags = fcntl(socket, F_GETFL, 0);
-        flags |= O_NONBLOCK;
+        if(!blocking){
+            flags |= O_NONBLOCK;
+        } else {
+            flags &= (~O_NONBLOCK);
+        }
         return fcntl(socket, F_SETFL, flags);
     #endif
 }
@@ -272,7 +278,7 @@ Server* ns_create_server(const char* server_address, int port, bool server_socke
     }
 
     if(server_socket_non_blocking)
-        if(set_non_blocking(listen_socket)){
+        if(ns_set_socket_blocking_mode(listen_socket, false)){
             LOG_DEBUG("Failed to set server socket %d as non blocking, ", (int)listen_socket);
             handle_socket_error();
             return NULL;
@@ -440,7 +446,7 @@ void ns_listen_incoming(Server* server){
         if(retval > 0){
     #endif
         SOCKET new_sock = accept(server->listening_socket, NULL, NULL);
-        retval = set_non_blocking(new_sock);
+        retval = ns_set_socket_blocking_mode(new_sock, false);
         if(retval < 0){
             handle_socket_error();
             return;
@@ -707,13 +713,15 @@ ClientResult ns_handle_client(Server* server, SOCKET client_socket){ // socket i
         }
 
         ns_call_all_middle_route_handlers(server, &req, &res);
-        RouteHandler* handle = ns_match_handler(server, &req);
-        if(handle == NULL){
-            LOG_DEBUG("Received HTTP request without appropriate handler on socket %d", (int)client_socket);
-            c_r = NS_CLIENT_RESULT_ERROR;
-            goto post_request_process;
+        if(res.body == NULL){
+            RouteHandler* handle = ns_match_handler(server, &req);
+            if(handle == NULL){
+                LOG_DEBUG("Received HTTP request without appropriate handler on socket %d", (int)client_socket);
+                c_r = NS_CLIENT_RESULT_ERROR;
+                goto post_request_process;
+            }
+            handle->handler(&req, &res, handle->param);
         }
-        handle->handler(&req, &res, handle->param);
         if(!res.borrowed){ // if it was borrowed - then the caller has to send it
             ns_send_response(&res);
             ns_free_request_response(&req, &res);

@@ -79,6 +79,12 @@ void json_serialize_string(JsonNode* node, void* buf, size_t elem_s, JsonParser*
 void json_serialize_chars(JsonNode* node, void* buf, size_t elem_s, JsonParser* parser);
 void json_serialize__Bool(JsonNode* node, void* buf, size_t elem_s, JsonParser* parser);
 void json_get_system_parser(JsonParser* parser);
+JsonNode* json_get_by_key(JsonNode* node, const char* key);
+void json_append(JsonNode* parent, JsonNode* child, JsonParser* parser);
+void json_field_create(JsonNode* node, const char* key, JsonNode* value, bool static_key, JsonParser* parser);
+void json_field_create_string(JsonNode* node, const char* key, const char* value, size_t value_total, bool static_kv, JsonParser* parser);
+void json_field_create_integral(JsonNode* node, const char* key, int64_t value, bool static_key, JsonParser* parser);
+void json_field_create_floating(JsonNode* node, const char* key, double value, bool static_key, JsonParser* parser);
 
 #define NJ_ARRAY(type) nj_array_ ##type
 #define NJ_PTR(type) nj_ptr_ ##type
@@ -1096,6 +1102,80 @@ void json_serialize__Bool(JsonNode* node, void* buf, size_t elem_s, JsonParser* 
 
 void json_get_system_parser(JsonParser* parser){
     n_system_allocator_init(&parser->allocator);
+}
+
+JsonNode* json_get_by_key(JsonNode* node, const char* key){
+        for(size_t i = 0; i < node->children.count; i++){
+        JsonNode* c = node->children.start + i;
+        if(strcmp(c->key, key) == 0){
+            if(c->type == FIELD & c->children.count > 0)
+                return c->children.start;
+            return c;
+        }
+    }
+    return NULL;
+}
+
+void json_append(JsonNode* parent, JsonNode* child, JsonParser* parser){
+    VEC_Push_Al(parent->children, child, (&parser->allocator));
+}
+
+void json_field_create(JsonNode* node, const char* key, JsonNode* value, bool static_key, JsonParser* parser){
+    char* k = (char*)key;
+    if(!static_key){
+        k = parser->allocator.alloc(parser->allocator.context, strnlen(key, 1024)+1);
+        strcpy_tn(k, 1023, key);
+    }
+    
+    JsonNode n_c = (JsonNode){.key=k, .static_key=static_key, .type=FIELD};
+    VEC_Push_Al(n_c.children, value, (&parser->allocator));
+    VEC_Push_Al(node->children, &n_c, (&parser->allocator));
+}
+
+void json_field_create_string(JsonNode* node, const char* key, const char* value, size_t value_total, bool static_kv, JsonParser* parser){
+    char* k = (char*)key;
+    char* v = (char*)value;
+    if(!static_kv){
+        k = parser->allocator.alloc(parser->allocator.context, strnlen(key, 1024)+1);
+        v = parser->allocator.alloc(parser->allocator.context, value_total+1);
+        strcpy_tn(k, 1023, key);
+        strcpy_tn(v, value_total, value);
+    }
+    
+    JsonNode n_c = (JsonNode){.key=k, .static_key=static_kv, .type=FIELD};
+    JsonNode n_c_c = (JsonNode){.key =v, .static_key=static_kv, .type=VALUE, .flags=STRING};
+    VEC_Push_Al(n_c.children, &n_c_c, (&parser->allocator));
+    VEC_Push_Al(node->children, &n_c, (&parser->allocator));
+}
+
+void json_field_create_integral(JsonNode* node, const char* key, int64_t value, bool static_key, JsonParser* parser){
+    char* k = (char*)key;
+    char* v = parser->allocator.alloc(parser->allocator.context, strnlen(key, 32));
+    if(!static_key){
+        k = parser->allocator.alloc(parser->allocator.context, strnlen(key, 1024)+1);
+        strcpy_tn(k, 1023, key);
+    }
+    snprintf(v, 32, "%lld", value);
+    
+    JsonNode n_c = (JsonNode){.key=k, .static_key=static_key, .type=FIELD};
+    JsonNode n_c_c = (JsonNode){.key =v, .static_key=false, .type=VALUE, .flags=NUMERICAL};
+    VEC_Push_Al(n_c.children, &n_c_c, (&parser->allocator));
+    VEC_Push_Al(node->children, &n_c, (&parser->allocator));
+}
+
+void json_field_create_floating(JsonNode* node, const char* key, double value, bool static_key, JsonParser* parser){
+    char* k = (char*)key;
+    char* v = parser->allocator.alloc(parser->allocator.context, strnlen(key, 32));
+    if(!static_key){
+        k = parser->allocator.alloc(parser->allocator.context, strnlen(key, 1024)+1);
+        strcpy_tn(k, 1023, key);
+    }
+    snprintf(v, 32, "%lf", value);
+    
+    JsonNode n_c = (JsonNode){.key=k, .static_key=static_key, .type=FIELD};
+    JsonNode n_c_c = (JsonNode){.key =v, .static_key=false, .type=VALUE, .flags=NUMERICAL};
+    VEC_Push_Al(n_c.children, &n_c_c, (&parser->allocator));
+    VEC_Push_Al(node->children, &n_c, (&parser->allocator));
 }
 
 #endif
