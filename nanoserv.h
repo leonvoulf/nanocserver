@@ -103,6 +103,7 @@ typedef struct HTTPRequest {
     A_VEC(Header) headers;
     const char* path;
     const char* body;
+    size_t body_length;
 } HTTPRequest;
 
 typedef void(*body_dealloc_t)(void*, void*);
@@ -215,11 +216,11 @@ bool handle_socket_error(){
                     (LPSTR)&s, 0, NULL);
         LOG_DEBUG("Socket error: %s\n", s);
         LocalFree(s);
-        return err != WSAEWOULDBLOCK;
+        return err != WSAEWOULDBLOCK && err != WSAEINPROGRESS;
     #else
         err = errno;
         LOG_DEBUG("Socket error: %s\n", strerror(err));
-        return err != EAGAIN && err != EWOULDBLOCK;
+        return err != EAGAIN && err != EWOULDBLOCK && err != EINPROGRESS;
     #endif
 }
 
@@ -555,6 +556,7 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
         char* body = (char*)malloc(cur_length+1); // ALLOCATION
         copystrn(body, cur_position, cur_length+1);
         req->body = body;
+        req->body_length = cur_length;
     }
     return true;
 }
@@ -585,7 +587,24 @@ char* ns_glue_response(HTTPResponse* res, size_t* response_size){
 void ns_send_response(HTTPResponse* res){
     size_t response_size = 0;
     char* full_resp = ns_glue_response(res, &response_size);
-    int r = send(res->client_socket, full_resp, response_size, 0);
+    int r = 0;
+    do {
+        int cur = send(res->client_socket, full_resp + r, response_size - r, 0); // busy waiting?!
+        if(cur < 0){
+            bool err = handle_socket_error();
+            if(err){
+                r = -1;
+                break;
+            } else {
+                #ifdef _WIN32
+                    Sleep(8);
+                #else
+                    usleep(8000);
+                #endif
+            }
+        }
+        r += cur;
+    } while(r < response_size);
     free(full_resp); // ALLOCATION
     if(r < 0){
         handle_socket_error();
@@ -680,8 +699,9 @@ ClientResult ns_handle_client(Server* server, SOCKET client_socket){ // socket i
     ClientResult c_r = NS_CLIENT_SUCCESSFUL;
     
     char initial_read_buffer[MAX_READ+1];
+    char secondary_read_buffer[MAX_READ+1];
     char* rbuff = initial_read_buffer;
-    int r = recv(client_socket, rbuff, MAX_READ, 0);
+    int r = recv(client_socket, rbuff, MAX_READ, MSG_PEEK);
     if(r < 0){
         bool e = handle_socket_error();
         return e ? NS_CLIENT_RESULT_ERROR : NS_CLIENT_WOULD_BLOCK;
@@ -691,26 +711,58 @@ ClientResult ns_handle_client(Server* server, SOCKET client_socket){ // socket i
         return NS_CLIENT_EMPTY;
     }
     else if(r > 0){
-        size_t cur_read = MAX_READ;
-        if(r >= cur_read){
-            rbuff = NC_ALLOCATE(cur_read*2+1);
-            strncpy(rbuff, initial_read_buffer, MAX_READ);
-            r = recv(client_socket, rbuff + r, cur_read, 0);
-            while(r >= cur_read){
-                cur_read *= 2;
-                rbuff = NC_REALLOCATE(rbuff, cur_read*2+1);
-                r = recv(client_socket, rbuff+cur_read, cur_read, 0);
-            }
-            cur_read += r;
-        } else {
-            cur_read = r;
-        }
-        rbuff[cur_read] = '\0';
 
-        if(!ns_breakdown_request(&req, client_socket, rbuff, (size_t)cur_read)){
+        if(!ns_breakdown_request(&req, client_socket, rbuff, (size_t)r)){ // this version is temporary, a better way to do it would be to allocate a buffer for every client. Here we are forcibly bound by the size of the recv buffer
             c_r = NS_CLIENT_RESULT_ERROR;
             goto post_request_process;
         }
+
+        const char* content_length = ns_get_header(&req, "Content-Length");
+        if(content_length == NULL){
+            recv(client_socket, rbuff, MAX_READ, 0);
+            goto post_multipacket_processing;
+        } else {
+            int ct_length = strtol(content_length, NULL, 10);
+            //size_t body_l = strlen(req->body); // CHANGE: replace with body length
+            if(ct_length <= req.body_length){
+                recv(client_socket, rbuff, MAX_READ, 0);
+                goto post_multipacket_processing;
+            }
+
+            size_t length_with_headers = ct_length + (r-req.body_length);
+
+            rbuff = NC_ALLOCATE(MAX_READ + ct_length+1);
+            if((r = recv(client_socket, rbuff, MAX_READ + ct_length+1, MSG_PEEK)) < length_with_headers - 16){
+                return NS_CLIENT_WOULD_BLOCK;
+            } else {
+                recv(client_socket, rbuff, MAX_READ + ct_length+1, 0);
+            }
+
+        }
+        // size_t cur_read = r;
+        // size_t cur_max = MAX_READ;
+        // if((r = recv(client_socket, secondary_read_buffer, MAX_READ/2, 0)) > 0){
+        //     cur_max *= 3;
+        //     rbuff = NC_ALLOCATE(cur_max+1);
+        //     strncpy(rbuff, initial_read_buffer, MAX_READ);
+        //     strncpy(rbuff + cur_read, secondary_read_buffer, MAX_READ/2);
+        //     cur_read += r;
+        //     while((r = recv(client_socket, rbuff+cur_read, cur_max/2, 0)) > 0){
+        //         if(cur_read + r >= cur_max / 2){
+        //             cur_max *= 2;
+        //             rbuff = NC_REALLOCATE(rbuff, cur_max*2+1);
+        //         }
+        //         cur_read += r;
+        //     }
+        // }
+        rbuff[r] = '\0';
+
+        if(!ns_breakdown_request(&req, client_socket, rbuff, (size_t)r)){
+            c_r = NS_CLIENT_RESULT_ERROR;
+            goto post_request_process;
+        }
+
+        post_multipacket_processing:
 
         ns_call_all_middle_route_handlers(server, &req, &res);
         if(res.body == NULL){
@@ -863,8 +915,12 @@ int ns_run_thread_pool(void* server_arg){
                 mtx_lock(&server->server_handler_m);
                 VEC_Push(server->sockets_to_remove, &client_socket);
                 mtx_unlock(&server->server_handler_m);
+            } else if(cr == NS_CLIENT_WOULD_BLOCK){
+                server->handler_params_queue.start[server->handler_params_queue.count-1] = server->handler_params_queue.start[0];
+                server->handler_params_queue.start[0] = client_socket;
+            } else { // remove from "stack" only if client hasn't finished sending data
+                (&server->handler_params_queue)->count = server->handler_params_queue.count-1;
             }
-            (&server->handler_params_queue)->count = server->handler_params_queue.count-1;
         }
         mtx_unlock(&server->handler_params_m);
         mtx_lock(&server->server_handler_m);
