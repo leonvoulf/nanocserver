@@ -340,8 +340,8 @@ void json_field_create_floating(JsonNode* node, const char* key, double value, b
         underlying_serialize(node, (void*)out_raw, sizeof(Type), parser);    \
     }
 
-#define NJ_DECLARE_PARSE_SERIALIZE_ENUM(Type) void json_parse_nj_enum_##Type(JsonNode* node, void* out_raw, size_t elem_s, JsonParser* parser);  json_serialize_nj_enum_##Type(JsonNode* node, void* buf_raw, size_t elem_s, JsonParser* parser);
-#define NJ_DEFINE_PARSE_SERIALIZE_ENUM(Type, names_ordered) void json_parse_nj_enum_##Type(JsonNode* node, void* out, size_t elem_s, JsonParser* parser) { \
+#define NJ_DECLARE_PARSE_SERIALIZE_ENUM(Type) void json_parse_nj_enum_ ##Type(JsonNode* node, void* out_raw, size_t elem_s, JsonParser* parser); void json_serialize_nj_enum_ ##Type(JsonNode* node, void* buf_raw, size_t elem_s, JsonParser* parser);
+#define NJ_DEFINE_PARSE_SERIALIZE_ENUM(Type, names_ordered) void json_parse_nj_enum_ ##Type(JsonNode* node, void* out, size_t elem_s, JsonParser* parser) { \
      if(node->type == FIELD){ \
         json_parse_nj_enum_##Type(&node->children.start[0], out, elem_s, parser); \
         return; \
@@ -378,9 +378,9 @@ void json_serialize_nj_enum_##Type(JsonNode* node, void* buf_raw, size_t elem_s,
     NJ_DEFINE_PARSE_SERIALIZE(Type, __VA_ARGS__);
 
 #ifdef NJ_STRUCT_IMPLEMENTATION
-    #define NJ_ENUM_PARSE_SERIALIZE(Type, strings) NJ_DEFINE_PARSE_SERIALIZE_ENUM(Type, strings); typedef Type NJ_M_EXPAND(NJ_ENUM(Type));
+    #define NJ_ENUM_PARSE_SERIALIZE(Type, strings) typedef Type NJ_M_EXPAND(NJ_ENUM(Type)); NJ_DEFINE_PARSE_SERIALIZE_ENUM(Type, strings); 
 #else 
-    #define NJ_ENUM_PARSE_SERIALIZE(Type, strings) NJ_DECLARE_PARSE_SERIALIZE_ENUM(Type); typedef Type NJ_M_EXPAND(NJ_ENUM(Type));
+    #define NJ_ENUM_PARSE_SERIALIZE(Type, strings) typedef Type NJ_M_EXPAND(NJ_ENUM(Type)); NJ_DECLARE_PARSE_SERIALIZE_ENUM(Type); 
 #endif
 
 #ifdef NJ_STRUCT_IMPLEMENTATION
