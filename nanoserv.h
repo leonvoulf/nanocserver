@@ -15,6 +15,7 @@
 #include <io.h>
 #include <winsock2.h>
 #undef DELETE
+#define poll WSAPoll
 
 
 #else
@@ -160,7 +161,7 @@ void ns_middle_handler(Server* server, HTTPMethod method, const char* match, req
 void ns_serve_directory(Server* server, const char* match, const char* directory_path);
 void ns_serve_file(Server* server, const char* match, const char* path);
 char** ns_parse_query_params(const HTTPRequest* request, char* buffer, size_t max_buffer_size, size_t max_params);
-long ns_calc_sleep(Server* server);
+long us_calc_sleep(Server* server);
 void ns_listen_incoming(Server* server);
 bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t count);
 char* ns_glue_response(HTTPResponse* res, size_t* response_size);
@@ -396,26 +397,20 @@ char** ns_parse_query_params(const HTTPRequest* request, char* buffer, size_t ma
     return (char**)buffer;
 }
 
-long ns_calc_sleep(Server* server){
+long us_calc_sleep(Server* server){
     uint64_t current_time = get_system_time();
     if(current_time - server->last_communication_time < 64)
         return 0;
     
-    return (current_time - server->last_communication_time) < 16384 ? (current_time - server->last_communication_time) : 16384;
+    return ((current_time - server->last_communication_time) < 999 ? (current_time - server->last_communication_time) : 999)*1000;
 }
 
 void ns_listen_incoming(Server* server){
     struct timeval tv = {0};
-    #ifdef _WIN32
-        fd_set readfds;
-        FD_ZERO(&readfds); 
-        FD_SET(server->listening_socket, &readfds);
-    #else
-        struct pollfd readfds = (struct pollfd){.fd=server->listening_socket, .events=POLLIN, .revents=0};
-    #endif
+    struct pollfd readfds = (struct pollfd){.fd=server->listening_socket, .events=POLLIN, .revents=0};
 
     tv.tv_sec = 0;
-    tv.tv_usec = ns_calc_sleep(server); //calc_sleep(server); // Server listening socket is blocking, to avoid total busywaiting
+    tv.tv_usec = us_calc_sleep(server); //calc_sleep(server); // Server listening socket is blocking, to avoid total busywaiting
 
     mtx_lock(&server->server_handler_m);
     if(server->sockets_to_remove.count > 0){
@@ -439,13 +434,24 @@ void ns_listen_incoming(Server* server){
     }
     mtx_unlock(&server->server_handler_m);
 
-    #ifdef _WIN32
-    int retval = select(server->listening_socket + 1, &readfds, NULL, NULL, &tv);
+    mtx_lock(&server->handler_params_m);
+    for(int i = 0; i < (int)server->handler_params_queue.count; i++){
+        bool found = false;
+        for(size_t j = 0; j < server->alive_sockets.count; j++){
+            if(server->handler_params_queue.start[i] == server->alive_sockets.start[j]){
+                found = true;
+                break;
+            }
+        }
+        if(!found){
+            VEC_Remove(server->handler_params_queue, i);
+            i--;
+        }
+    }
+    mtx_unlock(&server->handler_params_m);
+
+    int retval = poll(&readfds, 1, (int)((tv.tv_usec/1000 > 16) ? 16 : tv.tv_usec/1000));
     if(retval > 0){
-    #else
-        int retval = poll(&readfds, 1, (int)(tv.tv_usec > 16 ? 16 : tv.tv_usec));
-        if(retval > 0){
-    #endif
         SOCKET new_sock = accept(server->listening_socket, NULL, NULL);
         retval = ns_set_socket_blocking_mode(new_sock, false);
         if(retval < 0){
@@ -915,6 +921,7 @@ int ns_run_thread_pool(void* server_arg){
                 mtx_lock(&server->server_handler_m);
                 VEC_Push(server->sockets_to_remove, &client_socket);
                 mtx_unlock(&server->server_handler_m);
+                (&server->handler_params_queue)->count = server->handler_params_queue.count-1;
             } else if(cr == NS_CLIENT_WOULD_BLOCK){
                 server->handler_params_queue.start[server->handler_params_queue.count-1] = server->handler_params_queue.start[0];
                 server->handler_params_queue.start[0] = client_socket;
@@ -936,7 +943,7 @@ int ns_run_thread_pool(void* server_arg){
 }
 
 
-void ns_issue_handling_request(Server* server, SOCKET socket){
+bool ns_issue_handling_request(Server* server, SOCKET socket){
     mtx_lock(&server->handler_params_m);
     bool already_in_queue = false;
     for(size_t i = 0; i < server->handler_params_queue.count; i++){
@@ -955,34 +962,23 @@ void ns_issue_handling_request(Server* server, SOCKET socket){
         //     memcpy((void*)(server->handler_params_queue.start + server->handler_params_queue.count++), (void*)&socket, sizeof(*&socket));
     }
     mtx_unlock(&server->handler_params_m);
+    return !already_in_queue;
 }
 
 void ns_check_clients(Server* server){
-    #ifdef _WIN32
-        fd_set readfds;
-    #else
-        struct pollfd readfds[MAX_FD_SET];
-    #endif
+    struct pollfd readfds[MAX_FD_SET];
     struct timeval tv = {0};
 
     size_t cur_sock = 0;
     while(cur_sock < server->alive_sockets.count){
-        #ifdef _WIN32
-            FD_ZERO(&readfds);
-        #else
-            memset(readfds, 0, sizeof(readfds));
-        #endif
+        memset(readfds, 0, sizeof(readfds));
         int selected_sockets = 0;
         size_t until_full_sock = cur_sock;
         // breakdown all listening sockets to max_fd chunks, and select each of them
         for(; until_full_sock < server->alive_sockets.count; until_full_sock++){
-            #ifdef _WIN32
-                FD_SET(server->alive_sockets.start[until_full_sock], &readfds);
-            #else
-                readfds[selected_sockets].fd = server->alive_sockets.start[until_full_sock];
-                readfds[selected_sockets].events = POLLIN;
-                readfds[selected_sockets].revents = 0;
-            #endif
+            readfds[selected_sockets].fd = server->alive_sockets.start[until_full_sock];
+            readfds[selected_sockets].events = POLLIN;
+            readfds[selected_sockets].revents = 0;
             selected_sockets++;
             if(selected_sockets >= MAX_FD_SET-1)
                 break;
@@ -990,30 +986,25 @@ void ns_check_clients(Server* server){
 
         if(selected_sockets == 0)
             return;
-
-        #ifdef _WIN32
-            int retval = select(selected_sockets + 1, // PROBABLY SHOULD BE THE MAX SOCKET + 1
-                            &readfds, NULL, NULL, &tv); // maybe it will break without a timeout
-        #else
-            int retval = poll(readfds, selected_sockets, 0);
-        #endif
+        int retval = poll(readfds, selected_sockets, 0);
         if(retval > 0){
-            server->last_communication_time = get_system_time();
+            uint64_t system_time = get_system_time();
             for(size_t i = cur_sock; i < until_full_sock && i < server->alive_sockets.count; i++){
-                #ifdef _WIN32
-                if(FD_ISSET(server->alive_sockets.start[i], &readfds)){
-                #else
                 if(readfds[i-cur_sock].revents & POLLIN){
-                #endif
                     if(NS_THREAD_POOL_SIZE == 1){ // single thread
+                        server->last_communication_time = system_time;
                         ClientResult cr = ns_handle_client(server, server->alive_sockets.start[i]);
                         if(cr == NS_CLIENT_EMPTY || cr == NS_CLIENT_RESULT_ERROR){ // destroy the socket || 
                             VEC_Push(server->sockets_to_remove, &server->alive_sockets.start[i]);
                         }
                     } else {
-                        ns_issue_handling_request(server, server->alive_sockets.start[i]);
+                        if(ns_issue_handling_request(server, server->alive_sockets.start[i])){
+                            server->last_communication_time = system_time;
+                        }
                         cnd_signal(&server->server_cv);
                     }
+                } else if((readfds[i-cur_sock].revents & POLLHUP) || (readfds[i-cur_sock].revents & POLLERR)){
+                    VEC_Push(server->sockets_to_remove, &server->alive_sockets.start[i]);
                 }
                 
             }
