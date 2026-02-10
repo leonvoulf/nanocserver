@@ -111,7 +111,7 @@ int check_arena_json_server(int argc, char** argv){
     buffer[r] = '\0';
     printf("%s\n", buffer);
 
-    Server* serv = ns_create_server(NULL, 3000, true);
+    Server* serv = ns_create_server(NULL, 3000, true, NS_SUPPORTED_COMPRESSION_NONE);
     if(serv == NULL){
         fprintf(stderr, "Failed to initialize server\n");
         return 1;

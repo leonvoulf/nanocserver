@@ -54,7 +54,7 @@ void post_a(const HTTPRequest* req, HTTPResponse* res, route_handler_param param
 
 
 int main(){
-    Server* serv = ns_create_server(NULL, 3000, true);
+    Server* serv = ns_create_server(NULL, 3000, true, NS_SUPPORTED_COMPRESSION_NONE);
     if(serv == NULL){
         fprintf(stderr, "Failed to initialize server\n");
         return 1;
