@@ -45,7 +45,7 @@ typedef int SOCKET;
 #define MAX_FD_SET 64
 #define MAX_SOCKETS 
 #define MAX_READ 8192
-#define MAX_ALLOWED_CONTENT_LENGTH_CLIENT 1 << 23
+#define MAX_ALLOWED_CONTENT_LENGTH_CLIENT (1 << 23)
 
 #ifdef NS_DEBUG
 #define LOG_DEBUG(x, ...) printf(x, __VA_ARGS__)
@@ -53,6 +53,10 @@ typedef int SOCKET;
 #define LOG_DEBUG(x, ...)
 #endif
 
+#ifdef NS_OPENSSL_SUPPORT
+    typedef struct ssl_st SSL;
+    typedef struct ssl_ctx_st SSL_CTX;
+#endif
 
 #define CODE_TO_NAME(status_code) (((status_code*99999)%166)-3) // some magix
 
@@ -94,6 +98,13 @@ typedef enum {
     NS_CLIENT_WOULD_BLOCK = 2,
     NS_CLIENT_SUCCESSFUL = 3
 } ClientResult;
+
+typedef struct SocketState {
+    SOCKET socket;
+    #ifdef NS_OPENSSL_SUPPORT
+    SSL* ssl;
+    #endif
+} SocketState;
 
 typedef struct Header {
     const char* key;
@@ -142,14 +153,8 @@ typedef struct StoredClientState {
     char* send_buf;
     size_t s_sent;
     size_t s_total;
+    bool indicated_for_removal;
 } StoredClientState;
-
-typedef struct SocketState {
-    SOCKET socket;
-    #ifdef NS_OPENSSL_SUPPORT
-    SSL* ssl;
-    #endif
-} SocketState;
 
 #define NS_SUPPORTED_COMPRESSION_NONE 0
 #define NS_SUPPORTED_COMPRESSION_GZIP 1
@@ -173,6 +178,7 @@ typedef struct Server {
 
 #ifdef NS_OPENSSL_SUPPORT
     SSL_CTX* ssl_ctx;
+    A_VEC(SSL*) staging_ssl_sockets;
 #endif
 } Server;
 
@@ -219,14 +225,10 @@ int ns_set_socket_blocking_mode(SOCKET socket, bool blocking);
 #define NS_MINIMUM_SIZE_FOR_COMPRESSION 256
 #endif
 
-#define NS_COMPRESSION_BUFFER_SIZE 1 << 31
-#define NS_SUPPORTED_COMPRESSION_FLAG 0
+#define NS_COMPRESSION_BUFFER_SIZE (1 << 15)
 
 #ifdef NS_GZIP_SUPPORT
     #include <zlib.h>
-    #define NS_SUPPORTED_COMPRESSION_FLAG_REPLACE NS_SUPPORTED_COMPRESSION_FLAG + 1
-    #undef NS_SUPPORTED_COMPRESSION_FLAG
-    #define NS_SUPPORTED_COMPRESSION_FLAG NS_SUPPORTED_COMPRESSION_FLAG_REPLACE
 #endif
 
 #ifdef NS_OPENSSL_SUPPORT
@@ -364,29 +366,35 @@ Server* ns_create_server(const char* server_address, int port, bool server_socke
         return NULL;
     }
     Server* server = (Server*)NC_ALLOCATE(sizeof(Server));
-    server->supported_compression = supported_compression;
     memset((void*)server, 0, sizeof(Server));
     memcpy((void*)&server->address, (void*)&address, sizeof(struct sockaddr_in));
     server->port = port;
     server->last_communication_time = get_system_time();
     server->listening_socket = listen_socket;
 
+    server->supported_compression = supported_compression;
+
     return server;
 }
 
 bool ns_setup_ssl(Server* server, const char* cert_filename, const char* key_filename){
     #ifdef NS_OPENSSL_SUPPORT
-        SSL_library_init();
+        int r = OPENSSL_init_ssl(0, NULL);
+        if(r == 0) {
+            return false;
+        }
         SSL_CTX *ctx = SSL_CTX_new(TLS_server_method());
         if(!ctx)
             return false;
-        int r = SSL_CTX_use_certificate_file(ctx, cert_filename, SSL_FILETYPE_PEM);
+        r = SSL_CTX_use_certificate_file(ctx, cert_filename, SSL_FILETYPE_PEM);
         r = r & SSL_CTX_use_PrivateKey_file(ctx, key_filename, SSL_FILETYPE_PEM);
         if(r != 1){
             SSL_CTX_free(ctx);
             return false;
         }
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
         server->ssl_ctx = ctx;
+        return true;
     #else
         return false;
     #endif
@@ -403,7 +411,7 @@ void ns_destroy_server(Server* server){
 #ifdef NS_OPENSSL_SUPPORT
         if(server->alive_sockets.start[i].ssl != NULL){
             SSL_shutdown(server->alive_sockets.start[i].ssl);
-            SSL_free(server->alice_sockets.start[i].ssl);
+            SSL_free(server->alive_sockets.start[i].ssl);
             server->alive_sockets.start[i].ssl = NULL;
         }
 #endif
@@ -492,6 +500,39 @@ long us_calc_sleep(Server* server){
     return ((current_time - server->last_communication_time) < 999 ? (current_time - server->last_communication_time) : 999)*1000;
 }
 
+static bool ns_remove_socket_handling(Server* server, SocketState scst){
+    mtx_lock(&server->handler_params_m);
+    bool removed = false;
+    for(size_t i = 0; i < server->handler_params_queue.count; i++){
+        if(server->handler_params_queue.start[i].socket_state.socket == scst.socket){
+            server->handler_params_queue.start[i].socket_state.socket = INVALID_SOCKET;
+            VEC_Remove(server->handler_params_queue, i);
+            ns_free_client_state(server->handler_params_queue.start + i);
+            i--;
+            removed = true;
+        }
+    }
+    mtx_unlock(&server->handler_params_m);
+    return removed;
+}
+
+static void ns_remove_alive_socket_internal(Server* server, int pos){
+    #ifdef NS_OPENSSL_SUPPORT 
+        if(server->alive_sockets.start[pos].ssl != NULL){
+            ns_remove_socket_handling(server, server->alive_sockets.start[pos]);
+            SSL_shutdown(server->alive_sockets.start[pos].ssl);
+            memset(server->alive_sockets.start[pos].ssl, 0, 56);
+            //SSL_free(server->alive_sockets.start[j].ssl);
+            server->alive_sockets.start[pos].ssl = NULL;
+        } else
+    #else
+        shutdown(server->alive_sockets.start[pos].socket, SOCKET_SHUTDOWN_BOTH_DIRECTIONS);
+    #endif
+        
+    close_socket(server->alive_sockets.start[pos].socket); 
+    VEC_Remove(server->alive_sockets, pos);
+}
+
 void ns_listen_incoming(Server* server){
     struct timeval tv = {0};
     struct pollfd readfds = (struct pollfd){.fd=server->listening_socket, .events=POLLIN, .revents=0};
@@ -499,26 +540,22 @@ void ns_listen_incoming(Server* server){
     tv.tv_sec = 0;
     tv.tv_usec = us_calc_sleep(server); //calc_sleep(server); // Server listening socket is blocking, to avoid total busywaiting
 
-    mtx_lock(&server->server_handler_m);
+    mtx_lock(&server->handler_params_m);
+    for(int i = 0; i < (int)server->handler_params_queue.count; i++){
+        if(server->handler_params_queue.start[i].indicated_for_removal)
+            VEC_Push(server->sockets_to_remove, (&server->handler_params_queue.start[i].socket_state.socket));
+    }
+    mtx_unlock(&server->handler_params_m);
+
     if(server->sockets_to_remove.count > 0){
         for(int i = 0; i < (int)server->sockets_to_remove.count; i++){
             bool found_socket = false;
             for(size_t j = 0; j < server->alive_sockets.count; j++){
                 if(server->sockets_to_remove.start[i] == server->alive_sockets.start[j].socket){
-                    #ifdef NS_OPENSSL_SUPPORT 
-                        if(server->alive_sockets.start[j].ssl != NULL){
-                            SSL_shutdown(server->alive_sockets.start[j].ssl);
-                            SSL_free(server->alice_sockets.start[j].ssl);
-                            server->alive_sockets.start[j].ssl = NULL;
-                        } else
-                    #else
-                        shutdown(server->alive_sockets.start[j].socket, SOCKET_SHUTDOWN_BOTH_DIRECTIONS);
-                    #endif
-                       
-                    close_socket(server->alive_sockets.start[j].socket); 
+                    ns_remove_alive_socket_internal(server, j);
                     VEC_Remove(server->sockets_to_remove, (size_t)i);
-                    VEC_Remove(server->alive_sockets, j);
                     found_socket = true;
+                    i--;
                     break;
                 }
             }
@@ -528,24 +565,6 @@ void ns_listen_incoming(Server* server){
             }
         }
     }
-    mtx_unlock(&server->server_handler_m);
-
-    mtx_lock(&server->handler_params_m);
-    for(int i = 0; i < (int)server->handler_params_queue.count; i++){
-        bool found = false;
-        for(size_t j = 0; j < server->alive_sockets.count; j++){
-            if(server->handler_params_queue.start[i].socket == server->alive_sockets.start[j].socket){
-                found = true;
-                break;
-            }
-        }
-        if(!found){
-            ns_free_client_state(server->handler_params_queue.start + i);
-            VEC_Remove(server->handler_params_queue, i);
-            i--;
-        }
-    }
-    mtx_unlock(&server->handler_params_m);
 
     int retval = poll(&readfds, 1, (int)((tv.tv_usec/1000 > 16) ? 16 : tv.tv_usec/1000));
     if(retval > 0){
@@ -554,13 +573,19 @@ void ns_listen_incoming(Server* server){
 #ifdef NS_OPENSSL_SUPPORT
         if(server->ssl_ctx != NULL){
             SSL* ssl = SSL_new(server->ssl_ctx);
-            SSL_set_fd(server->ssl_ctx, new_sock);
-            if(SSL_accept(ssl) > 0){
-                sock_s.ssl = ssl;
-            } else {
-                close_socket(new_sock);
-                return;
+            SSL_set_fd(ssl, new_sock);
+            int ret;
+            if((ret = SSL_accept(ssl)) <= 0){
+                int err = SSL_get_error(ssl, ret);
+                if(err != SSL_ERROR_WANT_ACCEPT && err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE){
+                    close_socket(new_sock);
+                    return;
+                } else {
+                    VEC_Push(server->staging_ssl_sockets, &ssl);
+                    goto check_staging_sockets;
+                }
             }
+            sock_s.ssl = ssl;
         }
 #endif
         retval = ns_set_socket_blocking_mode(new_sock, false);
@@ -573,6 +598,28 @@ void ns_listen_incoming(Server* server){
     } else if(retval < 0) {
         handle_socket_error();
     }
+
+    #ifdef NS_OPENSSL_SUPPORT
+        check_staging_sockets:
+        for(size_t i = 0; i < server->staging_ssl_sockets.count; i++){
+            SSL* ssl = server->staging_ssl_sockets.start[i];
+            SOCKET new_sock = SSL_get_fd(ssl);
+            int ret;
+            if((ret = SSL_accept(ssl)) <= 0){
+                int err = SSL_get_error(ssl, ret);
+                if(err != SSL_ERROR_WANT_ACCEPT && err != SSL_ERROR_WANT_READ && err != SSL_ERROR_WANT_WRITE){
+                    close_socket(new_sock);
+                    VEC_Remove(server->staging_ssl_sockets, i);
+                    i--;
+                }
+            } else {
+                VEC_Remove(server->staging_ssl_sockets, i);
+                i--;
+                SocketState st = (SocketState){.socket=new_sock, .ssl=ssl};
+                VEC_Push(server->alive_sockets, &st);
+            }
+        }
+    #endif
 }
 
 // probably place these somewhere else
@@ -701,10 +748,15 @@ char* ns_glue_response(HTTPResponse* res, size_t* response_size){
 }  
 
 static void ns_compress_response(HTTPResponse* res, int compression){
-    if(res->body == NULL)
+    if(res->body == NULL || compression == NS_SUPPORTED_COMPRESSION_NONE)
         return;
-    
-    int actual_compression_level = compression & NS_SUPPORTED_COMPRESSION_FLAG ? compression : NS_SUPPORTED_COMPRESSION_NONE;
+
+    int actual_compression_level = NS_SUPPORTED_COMPRESSION_NONE;
+#ifdef NS_GZIP_SUPPORT
+    if(compression == NS_SUPPORTED_COMPRESSION_GZIP)
+        actual_compression_level = compression;
+#endif
+
     if(actual_compression_level == NS_SUPPORTED_COMPRESSION_NONE){
         return;
     }
@@ -731,18 +783,20 @@ static void ns_compress_response(HTTPResponse* res, int compression){
             strm_.avail_out = NS_COMPRESSION_BUFFER_SIZE;
             strm_.next_out = compression_store;
 
-            ret = deflate(&strm_, Z_FINISH);
+            int ret = deflate(&strm_, Z_FINISH);
             if (ret == Z_STREAM_ERROR) { return; } // deformed response...
 
             if (strm_.avail_out == 0 && in_body + NS_COMPRESSION_BUFFER_SIZE > new_body_length) {
                 new_body_length = new_body_length + NS_COMPRESSION_BUFFER_SIZE*2;
-                res->body = NC_REALLOCATE(res->body, new_body_length);
+                (char*)res->body = NC_REALLOCATE((char*)res->body, new_body_length);
             }
-            memcpy(res->body + in_body, compression_store, NS_COMPRESSION_BUFFER_SIZE - strm_.avail_out);
+            memcpy((char *)res->body + in_body, compression_store, NS_COMPRESSION_BUFFER_SIZE - strm_.avail_out);
             in_body += NS_COMPRESSION_BUFFER_SIZE - strm_.avail_out;
         } while (strm_.avail_out == 0);
         deflateEnd(&strm_);
-        ns_put_header(res, "Transfer-Encoding", "gzip");
+        ns_put_header(res, "Content-Encoding", "gzip");
+
+        res->body_length = in_body;
     #endif
     
 }
@@ -751,11 +805,16 @@ static int ns_decompress_request(HTTPRequest* req){
     if(req->body == NULL)
         return 1;
     int compression = NS_SUPPORTED_COMPRESSION_NONE;
-    const char* t_e = ns_get_header(&req, "Transfer-Encoding");
+    const char* t_e = ns_get_header(req, "Transfer-Encoding");
     if(t_e != NULL && strstr(t_e, "gzip") != NULL)
         compression = NS_SUPPORTED_COMPRESSION_GZIP;
 
-    int actual_compression_level = compression & NS_SUPPORTED_COMPRESSION_FLAG ? compression : NS_SUPPORTED_COMPRESSION_NONE;
+    int actual_compression_level = NS_SUPPORTED_COMPRESSION_NONE;
+    #ifdef NS_GZIP_SUPPORT
+        if(compression == NS_SUPPORTED_COMPRESSION_GZIP)
+            actual_compression_level = compression;
+    #endif
+
     if(actual_compression_level == NS_SUPPORTED_COMPRESSION_NONE){
         return actual_compression_level < compression ? 0 : 1;
     }
@@ -781,14 +840,14 @@ static int ns_decompress_request(HTTPRequest* req){
             strm_.avail_out = NS_COMPRESSION_BUFFER_SIZE;
             strm_.next_out = compression_store;
 
-            ret = inflate(&strm_, Z_NO_FLUSH);
+            int ret = inflate(&strm_, Z_NO_FLUSH);
             if (ret == Z_STREAM_ERROR || ret == Z_NEED_DICT || ret == Z_DATA_ERROR || ret == Z_MEM_ERROR) { return 0; } // deformed response...
 
             if (strm_.avail_in > 0 && in_body + NS_COMPRESSION_BUFFER_SIZE > new_body_length) {
                 new_body_length = new_body_length + NS_COMPRESSION_BUFFER_SIZE*2;
-                req->body = NC_REALLOCATE(req->body, new_body_length);
+                (char*)req->body = NC_REALLOCATE((char*)req->body, new_body_length);
             }
-            memcpy(req->body + in_body, compression_store, NS_COMPRESSION_BUFFER_SIZE - strm_.avail_out);
+            memcpy((char*)req->body + in_body, compression_store, NS_COMPRESSION_BUFFER_SIZE - strm_.avail_out);
             in_body += NS_COMPRESSION_BUFFER_SIZE - strm_.avail_out;
         }
         inflateEnd(&strm_);
@@ -807,7 +866,7 @@ static int s_read(SocketState* s, char* buffer, int read_size){
             int err = SSL_get_error(s->ssl, read);
             if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE){
                 #ifdef _WIN32
-                    WSASetLastError(WSAWOULDBLOCK);
+                    WSASetLastError(WSAEWOULDBLOCK);
                 #else
                     errno = EWOULDBLOCK;
                 #endif
@@ -835,7 +894,7 @@ static int s_write(SocketState* s, char* buffer, int write_size){
             int err = SSL_get_error(s->ssl, write);
             if(err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE){
                 #ifdef _WIN32
-                    WSASetLastError(WSAWOULDBLOCK);
+                    WSASetLastError(WSAEWOULDBLOCK);
                 #else
                     errno = EWOULDBLOCK;
                 #endif
@@ -981,9 +1040,20 @@ static void dealloc_wrapper(void* context, void* ptr){
     free(ptr);
 }
 
+static int ns_get_compression_level(const HTTPRequest* req, int max_level){
+    int compression_level = NS_SUPPORTED_COMPRESSION_NONE;
+    const char* enc;
+    if((enc = ns_get_header(req, "Accept-Encoding")) == NULL)
+        return compression_level;
+
+    if(strstr(enc, "gzip") != NULL && max_level >= NS_SUPPORTED_COMPRESSION_GZIP)
+        compression_level = NS_SUPPORTED_COMPRESSION_GZIP;
+    return compression_level;
+}
+
 ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // socket is ready for rw
     SocketState* cl_st = &client_st->socket_state;
-    SOCKET client_socket = client_st->socket;
+    SOCKET client_socket = cl_st->socket;
     HTTPRequest req = {0};
     HTTPResponse res = {.client_socket_state=*cl_st, .body_dealloc=dealloc_wrapper};
     ClientResult c_r = NS_CLIENT_SUCCESSFUL;
@@ -1085,7 +1155,7 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
 
         const char* t_e = NULL;
 
-        int decompressed = ns_decompress_request(&req, server->supported_compression);
+        int decompressed = ns_decompress_request(&req);
         if(!decompressed){
             ns_free_request_response(&req, &res);
             return NS_CLIENT_RESULT_ERROR;
@@ -1098,13 +1168,14 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
             RouteHandler* handle = ns_match_handler(server, &req);
             if(handle == NULL){
                 LOG_DEBUG("Received HTTP request without appropriate handler on socket %d", (int)client_socket);
-                c_r = NS_CLIENT_RESULT_ERROR;
+                c_r = NS_CLIENT_SUCCESSFUL;
                 goto post_request_process;
             }
             handle->handler(&req, &res, handle->param);
         }
         if(!res.borrowed){ // if it was borrowed - then the caller has to send it
-            ns_compress_response(&res, res->body_length < NS_MINIMUM_SIZE_FOR_COMPRESSION ? NS_SUPPORTED_COMPRESSION_NONE : server->compression_support);
+            int compression_level = ns_get_compression_level(&req, server->supported_compression);
+            ns_compress_response(&res, res.body_length < NS_MINIMUM_SIZE_FOR_COMPRESSION ? NS_SUPPORTED_COMPRESSION_NONE : compression_level);
             int r = ns_send_response(&res, client_st);
             if(r < 1)
                 res.body = NULL;
@@ -1232,6 +1303,12 @@ void ns_thread_pool_pop_single(Server* server){
     mtx_lock(&server->handler_params_m);
     if(server->handler_params_queue.count > 0){
         StoredClientState* client_st = server->handler_params_queue.start + server->handler_params_queue.count - 1;
+        while(client_st->indicated_for_removal && client_st >= server->handler_params_queue.start){
+            client_st--;
+        }
+        if(client_st < server->handler_params_queue.start)
+            goto post_handling;
+
         #ifdef _WIN32
             LOG_DEBUG("th handle %d", thrd_current()._Tid);
         #else
@@ -1240,10 +1317,8 @@ void ns_thread_pool_pop_single(Server* server){
 
         ClientResult cr = ns_handle_client(server, client_st);
         if(cr == NS_CLIENT_RESULT_ERROR || cr == NS_CLIENT_EMPTY){ // destroy the socket
-            mtx_lock(&server->server_handler_m);
-            VEC_Push(server->sockets_to_remove, &client_st->socket);
-            mtx_unlock(&server->server_handler_m);
-            (&server->handler_params_queue)->count = server->handler_params_queue.count-1;
+            LOG_DEBUG("Removing %d\n", (int)client_st->socket_state.socket);
+            client_st->indicated_for_removal = true;
         } else if(cr == NS_CLIENT_WOULD_BLOCK){
             StoredClientState st_t = *client_st;
             server->handler_params_queue.start[server->handler_params_queue.count-1] = server->handler_params_queue.start[0];
@@ -1252,6 +1327,9 @@ void ns_thread_pool_pop_single(Server* server){
             (&server->handler_params_queue)->count = server->handler_params_queue.count-1;
         }
     }
+
+    post_handling:
+
     mtx_unlock(&server->handler_params_m);
 }
 
@@ -1277,14 +1355,16 @@ int ns_run_thread_pool(void* server_arg){
 
 
 bool ns_issue_handling_request(Server* server, SocketState scst){
+    LOG_DEBUG("adding %d", (int)scst.socket);
     mtx_lock(&server->handler_params_m);
     bool already_in_queue = false;
     for(size_t i = 0; i < server->handler_params_queue.count; i++){
-        if(server->handler_params_queue.start[i].socket == scst.socket){
+        if(server->handler_params_queue.start[i].socket_state.socket == scst.socket){
             already_in_queue = true;
             break;
         }
     }
+
     if(!already_in_queue){
         StoredClientState scs = (StoredClientState){.socket_state = scst};
         VEC_Push(server->handler_params_queue, &scs);
@@ -1292,6 +1372,8 @@ bool ns_issue_handling_request(Server* server, SocketState scst){
     mtx_unlock(&server->handler_params_m);
     return !already_in_queue;
 }
+
+
 
 void ns_check_clients(Server* server){
     struct pollfd readfds[MAX_FD_SET];
@@ -1319,13 +1401,14 @@ void ns_check_clients(Server* server){
             uint64_t system_time = get_system_time();
             for(size_t i = cur_sock; i < until_full_sock && i < server->alive_sockets.count; i++){
                 if(readfds[i-cur_sock].revents & POLLIN){
-                    if(ns_issue_handling_request(server, server->alive_sockets.start[i].socket)){
+                    if(ns_issue_handling_request(server, server->alive_sockets.start[i])){
                         server->last_communication_time = system_time;
                     }
                     if(NS_THREAD_POOL_SIZE != 1){
                         cnd_signal(&server->server_cv);
                     }
                 } else if((readfds[i-cur_sock].revents & POLLHUP) || (readfds[i-cur_sock].revents & POLLERR)){
+                    ns_remove_socket_handling(server, server->alive_sockets.start[i]);
                     VEC_Push(server->sockets_to_remove, &server->alive_sockets.start[i].socket);
                 }
                 
