@@ -1139,7 +1139,7 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
                 ns_free_request_response(&req, &res);
                 return NS_CLIENT_WOULD_BLOCK;
             } else {
-                s_read(cl_st, rbuff, MAX_READ + ct_length+1);
+                r += new_r;
             }
 
         }
