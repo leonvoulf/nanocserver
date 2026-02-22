@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <fcntl.h>
 typedef int SOCKET;
+#define INVALID_SOCKET -1
 #define SOCKET_SHUTDOWN_BOTH_DIRECTIONS SHUT_RDWR
 
 #endif
