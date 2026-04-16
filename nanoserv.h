@@ -97,7 +97,8 @@ typedef enum {
     NS_CLIENT_RESULT_ERROR = 0,
     NS_CLIENT_EMPTY = 1,
     NS_CLIENT_WOULD_BLOCK = 2,
-    NS_CLIENT_SUCCESSFUL = 3
+    NS_CLIENT_WRITE_FULL = 3,
+    NS_CLIENT_SUCCESSFUL = 4
 } ClientResult;
 
 typedef struct SocketState {
@@ -148,6 +149,7 @@ typedef struct RouteHandler {
 
 typedef struct StoredClientState {
     SocketState socket_state;
+    time_t start_time;
     char* read_buf;
     size_t r_read;
     size_t r_total;
@@ -155,6 +157,10 @@ typedef struct StoredClientState {
     size_t s_sent;
     size_t s_total;
     bool indicated_for_removal;
+    bool dormant;
+    bool consumed;
+
+    int failed_at_read;
 } StoredClientState;
 
 #define NS_SUPPORTED_COMPRESSION_NONE 0
@@ -174,6 +180,9 @@ typedef struct Server {
     mtx_t handler_params_m;
     mtx_t server_handler_m;
     cnd_t server_cv;
+
+    int read_timeout;
+    int write_timeout;
 
     int supported_compression;
 
@@ -266,6 +275,9 @@ bool handle_socket_error(){
                     (LPSTR)&s, 0, NULL);
         LOG_DEBUG("Socket error: %s\n", s);
         LocalFree(s);
+        if(err == WSAEFAULT){
+            err += 0;
+        }
         return err != WSAEWOULDBLOCK && err != WSAEINPROGRESS;
     #else
         err = errno;
@@ -277,7 +289,10 @@ bool handle_socket_error(){
 int ns_set_socket_blocking_mode(SOCKET socket, bool blocking){
     #ifdef _WIN32
         u_long mode = blocking ? 0 : 1; // 1 for non-blocking, 0 for blocking
-        return ioctlsocket(socket, FIONBIO, &mode);
+        bool error = ioctlsocket(socket, FIONBIO, &mode) == SOCKET_ERROR;
+        int sndbuf = 0; // CHANGE!!!: REMOVE
+        error = error || setsockopt(socket, SOL_SOCKET, SO_SNDBUF, (char*)&sndbuf, sizeof(sndbuf));
+        return error ? -1 : 0;
     #else
         int flags = fcntl(socket, F_GETFL, 0);
         if(!blocking){
@@ -289,14 +304,21 @@ int ns_set_socket_blocking_mode(SOCKET socket, bool blocking){
     #endif
 }
 
-uint64_t get_system_time(){
+static void sleep_ms(int msec){
+    #ifdef _WIN32
+        Sleep(msec);
+    #else
+        usleep(msec*1000);
+    #endif
+}
+
+static uint64_t get_system_time(){
     #ifdef _WIN32
         return GetTickCount64();
     #else
-        struct timeval te;
-        gettimeofday(&te, NULL); // Get current time
-        uint64_t milliseconds = te.tv_sec * 1000LL + te.tv_usec / 1000; // Calculate milliseconds
-        return milliseconds;
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+        return ts.tv_sec * 1000ull + ts.tv_nsec / 1000000ull;
     #endif
 }
 
@@ -307,10 +329,14 @@ void ns_free_header(Header* header){
 }
 
 void ns_free_client_state(StoredClientState* scs){
-    if(scs->read_buf != NULL)
+    if(scs->read_buf != NULL){
         NC_FREE(scs->read_buf);
-    if(scs->send_buf != NULL)
+        scs->read_buf = NULL;
+    }
+    if(scs->send_buf != NULL){
         NC_FREE(scs->send_buf);
+        scs->send_buf = NULL;
+    }
 }
 
 Server* ns_create_server(const char* server_address, int port, bool server_socket_non_blocking, int supported_compression){
@@ -372,7 +398,7 @@ Server* ns_create_server(const char* server_address, int port, bool server_socke
     server->port = port;
     server->last_communication_time = get_system_time();
     server->listening_socket = listen_socket;
-
+    server->read_timeout = 20; server->write_timeout = 60;
     server->supported_compression = supported_compression;
 
     return server;
@@ -535,6 +561,7 @@ static void ns_remove_alive_socket_internal(Server* server, int pos){
 }
 
 void ns_listen_incoming(Server* server){
+    time_t current_time = time(NULL);
     struct timeval tv = {0};
     struct pollfd readfds = (struct pollfd){.fd=server->listening_socket, .events=POLLIN, .revents=0};
 
@@ -543,6 +570,9 @@ void ns_listen_incoming(Server* server){
 
     mtx_lock(&server->handler_params_m);
     for(int i = 0; i < (int)server->handler_params_queue.count; i++){
+        if(server->handler_params_queue.start[i].dormant && current_time > server->handler_params_queue.start[i].start_time + server->read_timeout){
+            server->handler_params_queue.start[i].indicated_for_removal = true;
+        }
         if(server->handler_params_queue.start[i].indicated_for_removal)
             VEC_Push(server->sockets_to_remove, (&server->handler_params_queue.start[i].socket_state.socket));
     }
@@ -928,7 +958,11 @@ static int ns_read_request_internal(StoredClientState* scs){
 }
 
 static int ns_send_response_internal(StoredClientState* scs){
-    int cur = s_write(&scs->socket_state, scs->send_buf + scs->s_sent, scs->s_total - scs->s_sent); // busy waiting?!
+    #ifdef NS_DEBUG_LIMIT_SEND
+        int cur = s_write(&scs->socket_state, scs->send_buf + scs->s_sent, NS_DEBUG_LIMIT_SEND < scs->s_total - scs->s_sent ? NS_DEBUG_LIMIT_SEND : scs->s_total - scs->s_sent);
+    #else
+        int cur = s_write(&scs->socket_state, scs->send_buf + scs->s_sent, scs->s_total - scs->s_sent); // busy waiting?!
+    #endif
     if(cur < 0){
         bool err = handle_socket_error();
         if(err){
@@ -952,9 +986,14 @@ int ns_send_response(HTTPResponse* res, StoredClientState* scs){
 
     scs->send_buf = full_resp;
     scs->s_total = response_size;
+    if(response_size > 1000000){
+        response_size += 0;
+    }
     int r = ns_send_response_internal(scs);
     if(r == 1){
         ns_free_client_state(scs);
+    } else {
+        r += 0;
     }
     return r;
 }
@@ -1065,7 +1104,7 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
             case -1:
                 return NS_CLIENT_RESULT_ERROR;
             case 0:
-                return NS_CLIENT_WOULD_BLOCK;
+                return NS_CLIENT_WRITE_FULL;
             case 1:
                 return NS_CLIENT_SUCCESSFUL;
         }
@@ -1164,6 +1203,9 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
 
         post_multipacket_processing:
 
+        time_t current_time = time(NULL);
+        client_st->start_time = current_time;
+
         ns_call_all_middle_route_handlers(server, &req, &res);
         if(res.body == NULL){
             RouteHandler* handle = ns_match_handler(server, &req);
@@ -1180,7 +1222,7 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
             int r = ns_send_response(&res, client_st);
             if(r < 1)
                 res.body = NULL;
-            c_r = r == 1 ? NS_CLIENT_SUCCESSFUL : r == 0 ? NS_CLIENT_WOULD_BLOCK : NS_CLIENT_RESULT_ERROR;
+            c_r = r == 1 ? NS_CLIENT_SUCCESSFUL : r == 0 ? NS_CLIENT_WRITE_FULL : NS_CLIENT_RESULT_ERROR;
             ns_free_request_response(&req, &res);
         }
         return c_r;
@@ -1300,38 +1342,92 @@ void ns_serve_file(Server* server, const char* match, const char* path){
     VEC_Push(server->handlers, &r);
 }
 
-void ns_thread_pool_pop_single(Server* server){
+static bool skip_client(StoredClientState* c){
+    return c->dormant || c->indicated_for_removal || c->consumed;
+}
+
+bool ns_thread_pool_pop_single(Server* server){
     mtx_lock(&server->handler_params_m);
+    bool empty = false;
     if(server->handler_params_queue.count > 0){
+        time_t current_time = time(NULL);
         StoredClientState* client_st = server->handler_params_queue.start + server->handler_params_queue.count - 1;
-        while(client_st->indicated_for_removal && client_st >= server->handler_params_queue.start){
+        while(skip_client(client_st) && client_st >= server->handler_params_queue.start){
             client_st--;
         }
-        if(client_st < server->handler_params_queue.start)
+        if(client_st < server->handler_params_queue.start){
+            empty = true;
             goto post_handling;
+        }
 
         #ifdef _WIN32
             LOG_DEBUG("th handle %d", thrd_current()._Tid);
         #else
             LOG_DEBUG("th handle %ld", server->handler_params_queue.count);
         #endif
+        client_st->consumed = true;
+        StoredClientState copied_st = *client_st;
+        mtx_unlock(&server->handler_params_m);
+        ClientResult cr = ns_handle_client(server, &copied_st);
 
-        ClientResult cr = ns_handle_client(server, client_st);
+        mtx_lock(&server->handler_params_m);
+        client_st = NULL;
+        size_t position = 0;
+        for(int i = 0; i < (int)server->handler_params_queue.count; i++)
+            if(server->handler_params_queue.start[i].socket_state.socket == copied_st.socket_state.socket){
+                client_st = server->handler_params_queue.start + i;
+                position = i;
+                break;
+            }
+
+        assert(client_st != NULL && "Consumed socket has been removed");
+
+        client_st->consumed = false;
         if(cr == NS_CLIENT_RESULT_ERROR || cr == NS_CLIENT_EMPTY){ // destroy the socket
             LOG_DEBUG("Removing %d\n", (int)client_st->socket_state.socket);
             client_st->indicated_for_removal = true;
-        } else if(cr == NS_CLIENT_WOULD_BLOCK){
-            StoredClientState st_t = *client_st;
-            server->handler_params_queue.start[server->handler_params_queue.count-1] = server->handler_params_queue.start[0];
-            server->handler_params_queue.start[0] = st_t;
+        } else if(cr == NS_CLIENT_WOULD_BLOCK || cr == NS_CLIENT_WRITE_FULL){
+            if((cr == NS_CLIENT_WOULD_BLOCK && current_time > client_st->start_time + server->read_timeout) ||
+                        (cr == NS_CLIENT_WRITE_FULL && current_time > client_st->start_time + server->write_timeout))
+                client_st->indicated_for_removal = true;
+            else { // move to the start of the stack only if timeout was not reached
+                // ADD A POLL TO SEE WHAT WENT WRONG WITH THE SOCKET
+                if((cr == NS_CLIENT_WOULD_BLOCK && client_st->read_buf == NULL))
+                    client_st->dormant = true;
+                else {
+                    client_st->failed_at_read++;
+                    struct pollfd rfd = {.fd=client_st->socket_state.socket, .events=POLLIN};
+                    int retval = poll(&rfd, 1, 0);
+                    StoredClientState st_t = *client_st;
+                    server->handler_params_queue.start[position] = server->handler_params_queue.start[0];
+                    server->handler_params_queue.start[0] = st_t;
+                }
+            }
         } else { // remove from "stack" only if client hasn't finished sending data
-            (&server->handler_params_queue)->count = server->handler_params_queue.count-1;
+
+            if(client_st->failed_at_read)
+                client_st->failed_at_read += 0;
+            VEC_Remove(server->handler_params_queue, position);
+
+        }
+
+        client_st = server->handler_params_queue.start + server->handler_params_queue.count-1;
+
+        while(client_st >= server->handler_params_queue.start && skip_client(client_st)){
+            client_st--;
+        }
+        if(client_st < server->handler_params_queue.start){
+            empty = true;
+            goto post_handling;
         }
     }
 
+    empty = server->handler_params_queue.count == 0;
     post_handling:
 
     mtx_unlock(&server->handler_params_m);
+
+    return empty;
 }
 
 int ns_run_thread_pool(void* server_arg){
@@ -1341,15 +1437,17 @@ int ns_run_thread_pool(void* server_arg){
     
     while(true){
         struct timespec tms = (struct timespec){.tv_sec=time(NULL)+NS_THREAD_WAIT_TIME};
-        ns_thread_pool_pop_single(server);
-        mtx_lock(&server->server_handler_m);
-        cnd_timedwait(&server->server_cv, &server->server_handler_m, &tms);
-        if(atomic_load_64(&server->shutdown_pending)){
+        bool should_wait = ns_thread_pool_pop_single(server);
+        if(should_wait){
+            mtx_lock(&server->server_handler_m);
+            cnd_timedwait(&server->server_cv, &server->server_handler_m, &tms);
             mtx_unlock(&server->server_handler_m);
+        } else {
+            //sleep_ms(16); // CHANGE: what is 16, stop magicking around
+        }
+        if(atomic_load_64(&server->shutdown_pending)){
             return 0;
         }
-
-        mtx_unlock(&server->server_handler_m);
     }
     return 1;
 }
@@ -1357,21 +1455,27 @@ int ns_run_thread_pool(void* server_arg){
 
 bool ns_issue_handling_request(Server* server, SocketState scst){
     LOG_DEBUG("adding %d", (int)scst.socket);
+    time_t current_time = time(NULL);
     mtx_lock(&server->handler_params_m);
     bool already_in_queue = false;
+    bool dormant_state_change = false;
     for(size_t i = 0; i < server->handler_params_queue.count; i++){
         if(server->handler_params_queue.start[i].socket_state.socket == scst.socket){
             already_in_queue = true;
+            if(server->handler_params_queue.start[i].dormant){
+                server->handler_params_queue.start[i].dormant = false;
+                dormant_state_change = true;
+            }
             break;
         }
     }
 
     if(!already_in_queue){
-        StoredClientState scs = (StoredClientState){.socket_state = scst};
+        StoredClientState scs = (StoredClientState){.socket_state = scst, .start_time=current_time};
         VEC_Push(server->handler_params_queue, &scs);
     }
     mtx_unlock(&server->handler_params_m);
-    return !already_in_queue;
+    return !already_in_queue && !dormant_state_change;
 }
 
 
@@ -1401,18 +1505,17 @@ void ns_check_clients(Server* server){
         if(retval > 0){
             uint64_t system_time = get_system_time();
             for(size_t i = cur_sock; i < until_full_sock && i < server->alive_sockets.count; i++){
-                if(readfds[i-cur_sock].revents & POLLIN){
+                if((readfds[i-cur_sock].revents & POLLHUP) || (readfds[i-cur_sock].revents & POLLERR)){
+                    ns_remove_socket_handling(server, server->alive_sockets.start[i]);
+                    VEC_Push(server->sockets_to_remove, &server->alive_sockets.start[i].socket);
+                } else if(readfds[i-cur_sock].revents & POLLIN){
                     if(ns_issue_handling_request(server, server->alive_sockets.start[i])){
                         server->last_communication_time = system_time;
                     }
                     if(NS_THREAD_POOL_SIZE != 1){
                         cnd_signal(&server->server_cv);
                     }
-                } else if((readfds[i-cur_sock].revents & POLLHUP) || (readfds[i-cur_sock].revents & POLLERR)){
-                    ns_remove_socket_handling(server, server->alive_sockets.start[i]);
-                    VEC_Push(server->sockets_to_remove, &server->alive_sockets.start[i].socket);
                 }
-                
             }
         } else if(retval < 0){
             handle_socket_error();
