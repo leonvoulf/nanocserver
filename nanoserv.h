@@ -1392,6 +1392,9 @@ bool ns_thread_pool_pop_single(Server* server){
                 client_st->indicated_for_removal = true;
             else { // move to the start of the stack only if timeout was not reached
                 // ADD A POLL TO SEE WHAT WENT WRONG WITH THE SOCKET
+                // THIS IS A PROBLEMATIC IMPLEMENTATION, IF WE'VE ALREADY SENT SOME DATA, THEN IT WILL BURN CPU CYCLES UNTIL IT FINISHES
+                // ON THE OTHER HAND, PUSHING IT BACK TO THE BEGINNING OF THE STACK WILL MAKE EVERYTHING MUCH SLOWER
+                // MAYBE WE SHOULD CREATE A "VIP" PATH TO HANDLE THOSE SOCKETS WHICH ALREADY HAVE PENDING READ/SEND
                 if((cr == NS_CLIENT_WOULD_BLOCK && client_st->read_buf == NULL))
                     client_st->dormant = true;
                 else {

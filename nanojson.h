@@ -593,8 +593,6 @@ JsonNode* json_from_buffer(const char* buffer, size_t buffer_len, int* error_cod
 
     for(size_t i = 0; i < buffer_len; i++){
         char c = buffer[i];
-        if(i == 5713)
-            i += 0;
         if(current_state == UNKNOWN_TOKEN){
             if(isspace(c))
                 continue;
