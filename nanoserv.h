@@ -1380,7 +1380,9 @@ bool ns_thread_pool_pop_single(Server* server){
                 break;
             }
 
-        assert(client_st != NULL && "Consumed socket has been removed");
+        if(client_st == NULL){ // Socket was removed externally, don't handle it
+            goto post_handling;
+        }
 
         client_st->consumed = false;
         if(cr == NS_CLIENT_RESULT_ERROR || cr == NS_CLIENT_EMPTY){ // destroy the socket

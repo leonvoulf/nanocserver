@@ -931,9 +931,10 @@ void json_parse_integral(JsonNode* node, void* out, size_t elem_s, JsonParser* p
         json_parse_integral(&node->children.start[0], out, elem_s, parser);
         return;
     }
-    assert((node->flags == NUMERICAL || node->flags == NULL_VALUE) && "Non numerical expressions cannot be parsed as numerical types");
-    if(node->flags == NULL_VALUE){
-        memset(out, 0, elem_s);
+    // supporting boolean in integral type may prove disasterous...
+    assert((node->flags == NUMERICAL || node->flags == NULL_VALUE || node->flags == FALSE_VALUE || node->flags == TRUE_VALUE) && "Non numerical expressions cannot be parsed as numerical types, only numbers, null or boolean are accepted");
+    if(node->flags != NUMERICAL){
+        memset(out, node->flags == TRUE_VALUE ? 1 : 0, elem_s);
         return;
     }
     if(elem_s == sizeof(int8_t)){
