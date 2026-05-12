@@ -1139,6 +1139,7 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
         return NS_CLIENT_EMPTY;
     }
     else if(r > 0){
+        time_t current_time = time(NULL);
 
         if(!ns_breakdown_request(&req, client_socket, rbuff, (size_t)r)){ // this version is temporary, a better way to do it would be to allocate a buffer for every client. Here we are forcibly bound by the size of the recv buffer
             c_r = NS_CLIENT_RESULT_ERROR;
@@ -1203,7 +1204,6 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
 
         post_multipacket_processing:
 
-        time_t current_time = time(NULL);
         client_st->start_time = current_time;
 
         ns_call_all_middle_route_handlers(server, &req, &res);
