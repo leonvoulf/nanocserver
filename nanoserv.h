@@ -1376,6 +1376,7 @@ bool ns_thread_pool_pop_single(Server* server){
         for(int i = 0; i < (int)server->handler_params_queue.count; i++)
             if(server->handler_params_queue.start[i].socket_state.socket == copied_st.socket_state.socket){
                 client_st = server->handler_params_queue.start + i;
+                client_st = copied_st; // copy back
                 position = i;
                 break;
             }
