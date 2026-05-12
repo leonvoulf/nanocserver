@@ -544,9 +544,9 @@ static bool ns_remove_socket_handling(Server* server, SocketState scst){
 }
 
 static void ns_remove_alive_socket_internal(Server* server, int pos){
+    ns_remove_socket_handling(server, server->alive_sockets.start[pos]);
     #ifdef NS_OPENSSL_SUPPORT 
         if(server->alive_sockets.start[pos].ssl != NULL){
-            ns_remove_socket_handling(server, server->alive_sockets.start[pos]);
             SSL_shutdown(server->alive_sockets.start[pos].ssl);
             memset(server->alive_sockets.start[pos].ssl, 0, 56);
             //SSL_free(server->alive_sockets.start[j].ssl);
