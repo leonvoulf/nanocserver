@@ -192,6 +192,12 @@ typedef struct Server {
 #endif
 } Server;
 
+#define NS_BREAKDOWN_REQUEST_INCOMPLETE -1
+#define NS_BREAKDOWN_REQUEST_MALFORMED 0
+#define NS_BREAKDOWN_REQUEST_SUCCESS 1
+
+#define NS_UNKNOWN_EXPECTED_SIZE ((size_t)-1)
+
 // API
 
 void ns_free_header(Header* header);
@@ -205,7 +211,7 @@ void ns_serve_file(Server* server, const char* match, const char* path);
 char** ns_parse_query_params(const HTTPRequest* request, char* buffer, size_t max_buffer_size, size_t max_params);
 long us_calc_sleep(Server* server);
 void ns_listen_incoming(Server* server);
-bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t count);
+int ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t count);
 char* ns_glue_response(HTTPResponse* res, size_t* response_size);
 int ns_send_response(HTTPResponse* res, StoredClientState* scs);
 HTTPResponse* ns_borrow_response(HTTPResponse* res); // gives up memory control of the response to the caller
@@ -527,11 +533,15 @@ long us_calc_sleep(Server* server){
     return ((current_time - server->last_communication_time) < 999 ? (current_time - server->last_communication_time) : 999)*1000;
 }
 
-static bool ns_remove_socket_handling(Server* server, SocketState scst){
+static bool ns_remove_socket_handling(Server* server, SOCKET scst){
     mtx_lock(&server->handler_params_m);
     bool removed = false;
     for(size_t i = 0; i < server->handler_params_queue.count; i++){
-        if(server->handler_params_queue.start[i].socket_state.socket == scst.socket){
+        if(server->handler_params_queue.start[i].socket_state.socket == scst){
+            if(server->handler_params_queue.start[i].consumed){
+                server->handler_params_queue.start[i].indicated_for_removal = true;
+                break;
+            }
             server->handler_params_queue.start[i].socket_state.socket = INVALID_SOCKET;
             VEC_Remove(server->handler_params_queue, i);
             ns_free_client_state(server->handler_params_queue.start + i);
@@ -544,7 +554,7 @@ static bool ns_remove_socket_handling(Server* server, SocketState scst){
 }
 
 static void ns_remove_alive_socket_internal(Server* server, int pos){
-    ns_remove_socket_handling(server, server->alive_sockets.start[pos]);
+    //ns_remove_socket_handling(server, server->alive_sockets.start[pos]);
     #ifdef NS_OPENSSL_SUPPORT 
         if(server->alive_sockets.start[pos].ssl != NULL){
             SSL_shutdown(server->alive_sockets.start[pos].ssl);
@@ -580,6 +590,7 @@ void ns_listen_incoming(Server* server){
 
     if(server->sockets_to_remove.count > 0){
         for(int i = 0; i < (int)server->sockets_to_remove.count; i++){
+            ns_remove_socket_handling(server, server->sockets_to_remove.start[i]);
             bool found_socket = false;
             for(size_t j = 0; j < server->alive_sockets.count; j++){
                 if(server->sockets_to_remove.start[i] == server->alive_sockets.start[j].socket){
@@ -678,7 +689,7 @@ char* str_search(char search_char, char* str, size_t length, size_t* new_length)
     return str + i;
 }
 
-bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t count){
+int ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t count){
     HTTPMethod method = METHOD_UNKNOWN;
     size_t cur_length = count;
     char* method_word = str_space(rbuff, cur_length, &cur_length);
@@ -688,7 +699,8 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
 
     if(method == METHOD_UNKNOWN || cur_length == 0){
         LOG_DEBUG("Unknown HTTP Method detected on socket %d", (int)socket);
-        return false;
+        cur_length = count;
+        goto search_header_block_end;
     }
     req->method = method;
     method_word = str_word(method_word, cur_length, &cur_length);
@@ -697,7 +709,8 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
 
     if(query_word_end-method_word == 0){
         LOG_DEBUG("No path passed to socket %d", (int)socket);
-        return false;
+        cur_length = count;
+        goto search_header_block_end;
     }
     char* path = (char*)NC_ALLOCATE(query_word_end-method_word+1); // ALLOCATION
     copystrn(path, method_word, query_word_end-method_word+1);
@@ -707,23 +720,31 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
     char* http_version_end = str_space(query_word_end, cur_length, &cur_length);
     if(http_version_end-query_word_end == 0){
         LOG_DEBUG("No http headers passed to socket %d", (int)socket);
-        return false;
+        cur_length = count - (method_word - rbuff);
+        goto search_header_block_end;
     }
     //headers until blank line - may begin with blank line
     bool blank_line_found = false;
     char* cur_position = str_word(http_version_end, cur_length, &cur_length);
+    if(cur_length == 0){
+        req->body = NULL;
+        return NS_BREAKDOWN_REQUEST_SUCCESS; // nobody, noheaders
+    }
     while(!blank_line_found && cur_length > 0){
         char* header_name_end = str_search(':', cur_position, cur_length, &cur_length);
         cur_length -= 1;
         char* header_value_start = str_word(header_name_end+1, cur_length, &cur_length);
         char* header_value_end = str_search('\n', header_value_start, cur_length, &cur_length);
+        if(header_name_end-cur_position+1 <= 0 || 
+                header_value_end-header_value_start+1 <= 0){
+            cur_length = count - (cur_position - rbuff);
+            goto cleanup_message_incomplete;
+        }
 
         char* key = (char*)NC_ALLOCATE(header_name_end-cur_position+1); // dont rely on dyn alloc
         copystrn(key, cur_position, header_name_end-cur_position+1);
-        assert(header_name_end-cur_position+1 > 0);
         
         char* value = (char*)NC_ALLOCATE(header_value_end-header_value_start+1);
-        assert(header_value_end-header_value_start+1 > 0);
         size_t copy_total = header_value_end-header_value_start;
         copystrn(value, header_value_start, header_value_end[-1] == '\r' ? copy_total : copy_total+1);
 
@@ -743,16 +764,37 @@ bool ns_breakdown_request(HTTPRequest* req, SOCKET socket, char* rbuff, size_t c
             }
     }
 
+    if(!blank_line_found)
+        goto cleanup_message_incomplete;
+
     if(cur_length == 0 || cur_length >= (1 << 31)){
         req->body = NULL;
-        return true; // nobody
+        return NS_BREAKDOWN_REQUEST_SUCCESS; // nobody
     } else {
         char* body = (char*)NC_ALLOCATE(cur_length+1); // ALLOCATION
         copystrn(body, cur_position, cur_length+1);
         req->body = body;
         req->body_length = cur_length;
     }
-    return true;
+    return NS_BREAKDOWN_REQUEST_SUCCESS;
+
+    cleanup_message_incomplete:
+        for(size_t i = 0; i < req->headers.count; i++){
+            if(req->headers.start[i].key != NULL){
+                NC_FREE((void*)req->headers.start[i].key);
+            }
+            if(req->headers.start[i].value != NULL)
+                NC_FREE((void*)req->headers.start[i].value);
+        }
+        VEC_Free(req->headers);
+    
+    search_header_block_end:
+        if(cur_length == 0)
+            return NS_BREAKDOWN_REQUEST_MALFORMED;
+    return strstr(rbuff + (cur_length > count ? 0 : count-cur_length), "\r\n\r\n") != NULL ?
+        NS_BREAKDOWN_REQUEST_MALFORMED : NS_BREAKDOWN_REQUEST_INCOMPLETE;
+    
+    
 }
 
 char* ns_glue_response(HTTPResponse* res, size_t* response_size){
@@ -944,7 +986,8 @@ static int s_write(SocketState* s, char* buffer, int write_size){
 }
 
 static int ns_read_request_internal(StoredClientState* scs){
-    int r = s_read(&scs->socket_state, scs->read_buf + scs->r_read, scs->r_total - scs->r_read);
+    int buff_size = scs->r_total == NS_UNKNOWN_EXPECTED_SIZE ? MAX_READ-scs->r_read : scs->r_total - scs->r_read;
+    int r = s_read(&scs->socket_state, scs->read_buf + scs->r_read, buff_size);
     if(r < 0){
         bool err = handle_socket_error();
         if(err){
@@ -954,7 +997,11 @@ static int ns_read_request_internal(StoredClientState* scs){
         }
     }
     scs->r_read += r;
-    return scs->r_read == scs->r_total ? 1 : 0;
+
+    if(r > 0 && scs->r_total == NS_UNKNOWN_EXPECTED_SIZE)
+        return 2;
+
+    return scs->r_read == buff_size ? 1 : 0;
 }
 
 static int ns_send_response_internal(StoredClientState* scs){
@@ -1126,10 +1173,12 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
             case 1:
                 r = client_st->r_total;
                 goto resume_multipacket_processing;
+            case 2:
+                r = client_st->r_read;
         }
+    } else {
+        r = s_read(cl_st, rbuff, MAX_READ);
     }
-
-    r = s_read(cl_st, rbuff, MAX_READ);
     if(r < 0){
         bool e = handle_socket_error();
         return e ? NS_CLIENT_RESULT_ERROR : NS_CLIENT_WOULD_BLOCK;
@@ -1140,10 +1189,21 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
     }
     else if(r > 0){
         time_t current_time = time(NULL);
+        rbuff[r] = '\0';
 
-        if(!ns_breakdown_request(&req, client_socket, rbuff, (size_t)r)){ // this version is temporary, a better way to do it would be to allocate a buffer for every client. Here we are forcibly bound by the size of the recv buffer
+        int brkdwn = ns_breakdown_request(&req, client_socket, rbuff, (size_t)r);
+        
+        if(brkdwn == NS_BREAKDOWN_REQUEST_MALFORMED || (r >= MAX_READ && brkdwn == NS_BREAKDOWN_REQUEST_INCOMPLETE)){ // this version is temporary, a better way to do it would be to allocate a buffer for every client. Here we are forcibly bound by the size of the recv buffer
             c_r = NS_CLIENT_RESULT_ERROR;
             goto post_request_process;
+        } else if(brkdwn == NS_BREAKDOWN_REQUEST_INCOMPLETE){
+            rbuff = NC_ALLOCATE(MAX_READ);
+            memcpy(rbuff, initial_read_buffer, r);
+            client_st->read_buf = rbuff;
+            client_st->r_read = r;
+            client_st->r_total = NS_UNKNOWN_EXPECTED_SIZE;
+            ns_free_request_response(&req, &res);
+            return NS_CLIENT_WOULD_BLOCK;
         }
 
         const char* content_length = ns_get_header(&req, "Content-Length");
@@ -1189,7 +1249,7 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
 
         rbuff[r] = '\0';
 
-        if(!ns_breakdown_request(&req, client_socket, rbuff, (size_t)r)){
+        if(ns_breakdown_request(&req, client_socket, rbuff, (size_t)r) != NS_BREAKDOWN_REQUEST_SUCCESS){
             ns_free_request_response(&req, &res);
             return NS_CLIENT_RESULT_ERROR;
         }
@@ -1229,7 +1289,7 @@ ClientResult ns_handle_client(Server* server, StoredClientState* client_st){ // 
     }
 
     post_request_process:
-    if(rbuff != initial_read_buffer)
+    if(rbuff != initial_read_buffer && rbuff != client_st->read_buf)
         NC_FREE(rbuff);
     return c_r;
 }
@@ -1512,7 +1572,7 @@ void ns_check_clients(Server* server){
             uint64_t system_time = get_system_time();
             for(size_t i = cur_sock; i < until_full_sock && i < server->alive_sockets.count; i++){
                 if((readfds[i-cur_sock].revents & POLLHUP) || (readfds[i-cur_sock].revents & POLLERR)){
-                    ns_remove_socket_handling(server, server->alive_sockets.start[i]);
+                    // ns_remove_socket_handling(server, server->alive_sockets.start[i]);
                     VEC_Push(server->sockets_to_remove, &server->alive_sockets.start[i].socket);
                 } else if(readfds[i-cur_sock].revents & POLLIN){
                     if(ns_issue_handling_request(server, server->alive_sockets.start[i])){

@@ -10,5 +10,7 @@ Server: maybe usage of an arena allocator would be quicker - but it would requir
 
 Server: SSL is currently not supported (add libssl support)
 Server: maybe add a basic http client
+Server: support fragmented packets, at least at the URL + header level, to avoid socket hangup error
+Server: add comprehensive testing, including fuzzing and sending many connections
 
 Common: added "full sequential atomic store/load", may impact arena performance - must benchmark
