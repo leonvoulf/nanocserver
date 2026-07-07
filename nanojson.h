@@ -864,10 +864,12 @@ size_t json_approximate_size(JsonNode* node, size_t add_indent){
     for(size_t i = 0; i < node->children.count; i++){
         total_size += json_approximate_size(&node->children.start[i], add_indent)+add_indent;
     }
-    return (node->key == NULL ? 0 : strlen(node->key) + total_size + 6);
+    return (node->key == NULL ? 0 : strlen(node->key)) + total_size + 6;
 }
 
 size_t output_node(JsonNode* node, char* buffer, size_t buffer_max, size_t cur_pos, size_t cur_indent, size_t add_indent){
+    if(buffer_max > (1ULL << ((sizeof(size_t)*8)-1))) // overflow, cannot write
+        return cur_pos;
     if(node->type == OBJECT){
         size_t child_pos = cur_pos + 1;
         buffer[cur_pos] = '{';
@@ -875,6 +877,8 @@ size_t output_node(JsonNode* node, char* buffer, size_t buffer_max, size_t cur_p
             child_pos += sprintf((buffer + child_pos), "\n%*.s", (int)(cur_indent+add_indent), " ");
         }
         for(size_t i = 0; i < node->children.count; i++){
+            if(child_pos >= buffer_max)
+                return child_pos;
             child_pos = output_node(&node->children.start[i], buffer, buffer_max-child_pos, child_pos, cur_indent+add_indent, add_indent);
             if(i < node->children.count - 1)
                 buffer[child_pos++] = ',';
@@ -891,6 +895,8 @@ size_t output_node(JsonNode* node, char* buffer, size_t buffer_max, size_t cur_p
             child_pos += sprintf((buffer + child_pos), "\n%*.s", (int)(cur_indent+1), " ");
         }
         for(size_t i = 0; i < node->children.count; i++){
+            if(child_pos >= buffer_max)
+                return child_pos;
             child_pos = output_node(&node->children.start[i], buffer, buffer_max-child_pos, child_pos, cur_indent+add_indent, add_indent);
             if(i < node->children.count - 1)
                 buffer[child_pos++] = ',';
