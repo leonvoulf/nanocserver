@@ -320,9 +320,6 @@ void* n_arena_allocator_realloc(void* allocator, void* start, size_t size){ // p
             (size - to_skip) + 2*sizeof(uint32_t) < (*(uint32_t*)after_start & (uint32_t)(~(1 << 31)))))
         || (size + 2*sizeof(uint32_t) < to_skip)){
         uint32_t free_after = *(uint32_t*)after_start;
-        if(to_skip >= size + sizeof(uint32_t)){
-            to_skip += 0;
-        }
 
         if(!compare_and_swap_32((volatile uint32_t*)after_start, free_after, 0))
             n_arena_allocator_realloc(allocator, start, size);
@@ -424,10 +421,6 @@ void* n_arena_allocator_alloc(void* allocator, size_t size){ // proceed only if 
         return n_arena_allocator_alloc(allocator, size);
     }
     uint32_t cur_free = *(uint32_t*)cur;
-
-    if(((cur - (char*)c->start) > 2229100) && ((cur - (char*)c->start) <= 2229250)){
-        size_to_alloc += 0;
-    }
 
     if(!compare_and_swap_32((volatile uint32_t*)cur, cur_free, ((uint32_t)(1 << 31)) | size_to_alloc))
         n_arena_allocator_alloc(allocator, size);

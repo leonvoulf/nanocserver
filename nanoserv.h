@@ -281,9 +281,6 @@ bool handle_socket_error(){
                     (LPSTR)&s, 0, NULL);
         LOG_DEBUG("Socket error: %s\n", s);
         LocalFree(s);
-        if(err == WSAEFAULT){
-            err += 0;
-        }
         return err != WSAEWOULDBLOCK && err != WSAEINPROGRESS;
     #else
         err = errno;
@@ -1033,14 +1030,9 @@ int ns_send_response(HTTPResponse* res, StoredClientState* scs){
 
     scs->send_buf = full_resp;
     scs->s_total = response_size;
-    if(response_size > 1000000){
-        response_size += 0;
-    }
     int r = ns_send_response_internal(scs);
     if(r == 1){
         ns_free_client_state(scs);
-    } else {
-        r += 0;
     }
     return r;
 }
@@ -1471,8 +1463,6 @@ bool ns_thread_pool_pop_single(Server* server){
             }
         } else { // remove from "stack" only if client hasn't finished sending data
 
-            if(client_st->failed_at_read)
-                client_st->failed_at_read += 0;
             VEC_Remove(server->handler_params_queue, position);
 
         }
