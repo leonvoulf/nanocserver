@@ -879,7 +879,7 @@ size_t output_node(JsonNode* node, char* buffer, size_t buffer_max, size_t cur_p
         for(size_t i = 0; i < node->children.count; i++){
             if(child_pos >= buffer_max)
                 return child_pos;
-            child_pos = output_node(&node->children.start[i], buffer, buffer_max-child_pos, child_pos, cur_indent+add_indent, add_indent);
+            child_pos = output_node(&node->children.start[i], buffer, buffer_max-(child_pos-cur_pos), child_pos, cur_indent+add_indent, add_indent);
             if(i < node->children.count - 1)
                 buffer[child_pos++] = ',';
             if(add_indent > 0)
@@ -897,7 +897,7 @@ size_t output_node(JsonNode* node, char* buffer, size_t buffer_max, size_t cur_p
         for(size_t i = 0; i < node->children.count; i++){
             if(child_pos >= buffer_max)
                 return child_pos;
-            child_pos = output_node(&node->children.start[i], buffer, buffer_max-child_pos, child_pos, cur_indent+add_indent, add_indent);
+            child_pos = output_node(&node->children.start[i], buffer, buffer_max-(child_pos-cur_pos), child_pos, cur_indent+add_indent, add_indent);
             if(i < node->children.count - 1)
                 buffer[child_pos++] = ',';
             if(add_indent > 0)
@@ -911,7 +911,7 @@ size_t output_node(JsonNode* node, char* buffer, size_t buffer_max, size_t cur_p
         size_t l = strlen(node->key);
         snprintf((buffer+cur_pos), l+4, "\"%s\":", node->key);
         assert(node->children.count > 0 && "An orphaned field was unepexctedly encountered");
-        size_t child_pos = output_node(&node->children.start[0], buffer, buffer_max-cur_pos-l-3, cur_pos+l+3, cur_indent, add_indent);
+        size_t child_pos = output_node(&node->children.start[0], buffer, buffer_max-l-3, cur_pos+l+3, cur_indent, add_indent);
         return child_pos;
     }
     if(node->type == VALUE){
