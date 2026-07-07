@@ -170,7 +170,7 @@ bool compare_and_swap_ptr(volatile void** target, volatile void* comparand, void
 bool compare_and_swap_32(volatile uint32_t* target, uint32_t comparand, uint32_t value){
     #ifdef _WIN32
         _ReadWriteBarrier();
-        return InterlockedCompareExchange(target, value, comparand) == comparand;
+        return InterlockedCompareExchange((LONG*)target, (LONG)value, (LONG)comparand) == comparand;
     #elif defined(__GNUC__)
         return __atomic_compare_exchange_n(target, &comparand, value, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
     #endif

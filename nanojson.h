@@ -579,6 +579,22 @@ typedef enum {
     COMMENT = 13
 } State;
 
+static inline char* expression_append(char* expr, bool is_dyn, size_t* max_l, size_t pos, char c, JsonParser* parser){
+    char* e = expr;
+    if(pos >= *max_l){
+        size_t m = *max_l * 1.5;
+        if(!is_dyn){
+            e = parser->allocator.alloc(parser->allocator.context, m);
+            memcpy(e, expr, *max_l*sizeof(char));
+        }
+        else
+            e = parser->allocator.realloc(parser->allocator.context, e, m);
+        *max_l = m;
+    }
+    e[pos] = c;
+    return e;
+}
+
 JsonNode* json_from_buffer(const char* buffer, size_t buffer_len, int* error_code, JsonParser* parser){
     JsonNode* current_node = (JsonNode*)parser->allocator.alloc(parser->allocator.context, sizeof(JsonNode)); 
     (*current_node) = (JsonNode){.type=OBJECT, .key="R", .static_key=true, .children={0}, .parent=NULL};
@@ -586,7 +602,9 @@ JsonNode* json_from_buffer(const char* buffer, size_t buffer_len, int* error_cod
     State prev_state = UNKNOWN_TOKEN;
     int quotes = 2;
     
-    char expression[MAX_EXPRESSION_LENGTH] = {0};
+    char expr[MAX_EXPRESSION_LENGTH] = {0};
+    size_t cap_expr = MAX_EXPRESSION_LENGTH;
+    char* expression = expr;
     size_t expr_len = 0;
     bool escape = false;
     bool number_post_exponent = false;
@@ -670,11 +688,16 @@ JsonNode* json_from_buffer(const char* buffer, size_t buffer_len, int* error_cod
                     return NULL; // SET ERROR: no exponent value provided for numerical type
                 }
 
-                JsonNode n_node = (JsonNode) {.type = VALUE, .key=NULL, .children={0}, .parent=current_node};
-                n_node.key = (const char *)parser->allocator.alloc(parser->allocator.context, expr_len+1); // ALLOCATION
-                copystrn((char*)n_node.key, expression, expr_len+1);
+                JsonNode n_node = (JsonNode) {.type = VALUE, .key=expression == expr ? NULL : expression,
+                                                     .children={0}, .parent=current_node};
+                if(n_node.key == NULL){
+                    n_node.key = (const char *)parser->allocator.alloc(parser->allocator.context, expr_len+1); // ALLOCATION
+                    copystrn((char*)n_node.key, expression, expr_len+1);
+                }
                 //printf("%.*s\n", expr_len, expression);
                 number_post_exponent = false;
+                expression = expr;
+                cap_expr = MAX_EXPRESSION_LENGTH;
                 expression[0] = '\0';
                 expr_len = 0;
 
@@ -718,7 +741,7 @@ JsonNode* json_from_buffer(const char* buffer, size_t buffer_len, int* error_cod
                         number_post_exponent = false;
                     }
                 }
-                expression[expr_len++] = c;
+                expression = expression_append(expression, expression != expr, &cap_expr, expr_len++, c, parser);
                 // if(c == '\\')
                 //     expression[expr_len++] = c;  
             }
@@ -734,7 +757,7 @@ JsonNode* json_from_buffer(const char* buffer, size_t buffer_len, int* error_cod
             }
 
             else{
-                expression[expr_len++] = c;
+                expression = expression_append(expression, expression != expr, &cap_expr, expr_len++, c, parser);
                 // if(c == '\\')
                 //     expression[expr_len++] = c;  
             }
@@ -744,10 +767,15 @@ JsonNode* json_from_buffer(const char* buffer, size_t buffer_len, int* error_cod
             if (c == ',' || c == ']' || c == '}'){
                 current_state = c == ',' ? COMMA_SEPARATOR : c == ']' ? ARRAY_END : OBJECT_END;
 
-                JsonNode n_node = (JsonNode) {.type = VALUE, .key=NULL, .children={0}, .parent=current_node};
-                n_node.key = (const char *)parser->allocator.alloc(parser->allocator.context, expr_len); // ALLOCATION
-                copystrn((char*)n_node.key, (expression+1), expr_len);
+                JsonNode n_node = (JsonNode) {.type = VALUE, .key=expression==expr ? NULL : expression,
+                                                 .children={0}, .parent=current_node};
+                if(n_node.key == NULL){
+                    n_node.key = (const char *)parser->allocator.alloc(parser->allocator.context, expr_len); // ALLOCATION
+                    copystrn((char*)n_node.key, (expression+1), expr_len);
+                }
                 //printf("%.*s\n", expr_len, expression);
+                expression = expr;
+                cap_expr = MAX_EXPRESSION_LENGTH;
                 expression[0] = '\0';
                 expr_len = 0;
 
@@ -836,7 +864,7 @@ size_t json_approximate_size(JsonNode* node, size_t add_indent){
     for(size_t i = 0; i < node->children.count; i++){
         total_size += json_approximate_size(&node->children.start[i], add_indent)+add_indent;
     }
-    return (node->key == NULL ? 0 : strnlen(node->key, 1024)) + total_size + 6;
+    return (node->key == NULL ? 0 : strlen(node->key) + total_size + 6);
 }
 
 size_t output_node(JsonNode* node, char* buffer, size_t buffer_max, size_t cur_pos, size_t cur_indent, size_t add_indent){
